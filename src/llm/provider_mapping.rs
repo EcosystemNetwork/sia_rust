@@ -144,9 +144,43 @@ mod tests {
     use super::*;
     use crate::providers::load_provider;
 
+    /// Serializes every `with_env_var` window across the whole test binary.
+    /// Process env is global to all threads, so without this lock a sibling
+    /// test setting the same var can leak into another test's unset window
+    /// under `cargo test`'s parallel runner (flaky failures).
+    static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    thread_local! {
+        /// True while this thread already owns `ENV_GUARD`. `std::sync::Mutex`
+        /// is not reentrant, so a nested `with_env_var` (e.g. setting a key and
+        /// clearing a base-url override in one window) must skip re-locking or
+        /// it self-deadlocks.
+        static ENV_GUARD_HELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    /// Releases `ENV_GUARD` and clears the per-thread held flag on drop, after
+    /// the full snapshot→restore window completes.
+    struct EnvLock(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
+    impl Drop for EnvLock {
+        fn drop(&mut self) {
+            ENV_GUARD_HELD.with(|h| h.set(false));
+        }
+    }
+
     /// Run `f` with `var` set to `value`, snapshotting + restoring the prior
-    /// value so the test is deterministic regardless of host env.
+    /// value so the test is deterministic regardless of host env *and* of other
+    /// tests mutating the same variable concurrently.
     fn with_env_var<T>(var: &str, value: Option<&str>, f: impl FnOnce() -> T) -> T {
+        // Acquire the lock only at the outermost call on this thread; nested
+        // calls reuse the lock the outer frame already holds. Tolerate
+        // poisoning so a prior panicking test can't wedge the rest of the suite.
+        let _lock = if ENV_GUARD_HELD.with(|h| h.get()) {
+            None
+        } else {
+            let guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+            ENV_GUARD_HELD.with(|h| h.set(true));
+            Some(EnvLock(guard))
+        };
         let saved = std::env::var(var).ok();
         match value {
             Some(v) => std::env::set_var(var, v),
