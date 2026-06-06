@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SIA Arena</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-2: #1d212b; --border: #272c38;
+    --text: #e6e9ef; --muted: #8b93a7; --accent: #6ea8fe; --good: #4ade80;
+    --bad: #f87171; --warn: #fbbf24; --code-bg: #11141a;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --r-sm: 6px; --r: 10px; --r-lg: 14px;
+    --shadow: 0 10px 28px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+    font-size: 14px; line-height: 1.5; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .topbar { position: sticky; top: 0; z-index: 20; background: var(--bg);
+    border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex;
+    align-items: center; gap: 16px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad);
+    box-shadow: 0 0 8px var(--bad); display: inline-block; }
+  .dot.live { background: var(--good); box-shadow: 0 0 8px var(--good); }
+  .spacer { flex: 1; }
+  input, button, select { font-family: var(--sans); font-size: 13px; }
+  input[type=text], input[type=password], input[type=number] {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--r-sm); padding: 7px 10px; }
+  input:focus { outline: none; border-color: var(--accent); }
+  button { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--r-sm); padding: 8px 14px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0a0d14; border-color: var(--accent);
+    font-weight: 700; }
+  button.danger { border-color: color-mix(in srgb, var(--bad) 55%, var(--border)); color: var(--bad); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .grid { display: grid; grid-template-columns: 360px 1fr; gap: 18px; padding: 18px 24px 60px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg);
+    padding: 16px; margin-bottom: 18px; }
+  .panel h2 { font-size: 14px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .panel h2 .count { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .muted { color: var(--muted); }
+  .empty { color: var(--muted); font-style: italic; padding: 10px 2px; }
+  .badge { font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--border); display: inline-flex;
+    align-items: center; gap: 5px; white-space: nowrap; }
+  .badge.waiting { color: var(--muted); }
+  .badge.assigned { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); }
+  .badge.running { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+  .badge.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, var(--border)); }
+  .badge.scored { color: var(--good); }
+  .badge.failed { color: var(--bad); }
+  .agent { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px;
+    margin-bottom: 8px; background: var(--panel-2); }
+  .agent .row { display: flex; align-items: center; gap: 8px; }
+  .agent .name { font-weight: 600; }
+  .agent .kind { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .agent .progress { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .agent .asgs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .chip { font-size: 11px; font-family: var(--mono); padding: 2px 7px; border-radius: var(--r-sm);
+    border: 1px solid var(--border); background: var(--panel); }
+  .chip.scored { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
+  .chip.failed { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+  .chip.running { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+  .bench-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm);
+    border: 1px solid transparent; }
+  .bench-item:hover { background: var(--panel-2); }
+  .bench-item input { width: 16px; height: 16px; }
+  .bench-item .title { font-weight: 600; }
+  .bench-item .id { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .config { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+  .config label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .config input { width: 130px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.num { font-family: var(--mono); text-align: right; }
+  .rank { color: var(--muted); font-family: var(--mono); }
+  .toast { position: fixed; bottom: 18px; right: 18px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 10px 14px; box-shadow: var(--shadow); max-width: 360px; }
+  .toast.err { border-color: var(--bad); color: var(--bad); }
+  .matrix { overflow-x: auto; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span id="livedot" class="dot"></span>
+    <h1>SIA&nbsp;Arena</h1>
+    <span class="muted" id="conn">connecting…</span>
+    <span class="spacer"></span>
+    <input id="token" type="password" placeholder="admin token (if set)" style="width:200px" />
+    <button id="save-token">Use token</button>
+    <a href="/" class="badge">← SIA Studio</a>
+  </div>
+
+  <div class="grid">
+    <!-- Left: waiting room -->
+    <div>
+      <div class="panel">
+        <h2>Waiting Room <span class="count" id="agent-count"></span></h2>
+        <div id="agents"></div>
+      </div>
+    </div>
+
+    <!-- Right: control + results -->
+    <div>
+      <div class="panel">
+        <h2>Benchmarks <span class="count" id="bench-count"></span></h2>
+        <div id="benchmarks"></div>
+        <div class="config">
+          <label>Suggested model<input id="cfg-model" type="text" placeholder="(optional)" /></label>
+          <label>Max turns<input id="cfg-turns" type="number" value="30" min="1" /></label>
+          <label>Time limit (s)<input id="cfg-time" type="number" value="1800" min="1" /></label>
+        </div>
+        <div class="controls">
+          <button id="save-sel">Save selection</button>
+          <button id="go" class="primary">▶ GO — run on all waiting agents</button>
+          <button id="reset" class="danger">Reset</button>
+        </div>
+        <div class="muted" id="sel-hint" style="margin-top:8px"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Leaderboard</h2>
+        <div id="leaderboard"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Results matrix <span class="count">agent × benchmark accuracy %</span></h2>
+        <div class="matrix" id="matrix"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Battles <span class="count" id="battle-count"></span></h2>
+        <div id="battles"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" style="display:none"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let STATE = null;
+let ES = null;
+
+function token() { return localStorage.getItem('sia_arena_admin_token') || ''; }
+function setToken(t) { localStorage.setItem('sia_arena_admin_token', t || ''); }
+
+function headers() {
+  const h = { 'Content-Type': 'application/json' };
+  if (token()) h['X-Admin-Token'] = token();
+  return h;
+}
+
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isErr ? ' err' : '');
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 4000);
+}
+
+async function post(path, body) {
+  const res = await fetch(path, { method: 'POST', headers: headers(), body: JSON.stringify(body || {}) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { toast((data && data.detail) || ('HTTP ' + res.status), true); throw new Error('req failed'); }
+  return data;
+}
+
+// ---- rendering ---------------------------------------------------------- //
+
+function badge(status) { return `<span class="badge ${status}">${status}</span>`; }
+
+function renderAgents(s) {
+  const el = $('agents');
+  $('agent-count').textContent = s.agents.length ? `${s.agents.length} connected` : '';
+  if (!s.agents.length) { el.innerHTML = '<div class="empty">No agents connected. Start a worker to join the waiting room.</div>'; return; }
+  el.innerHTML = s.agents.map(a => {
+    const asgs = (a.assignments || []).map(x => {
+      const pct = x.accuracy_percent != null ? ` ${x.accuracy_percent.toFixed(1)}%` : '';
+      return `<span class="chip ${x.status}" title="${x.error || ''}">${x.benchmark_id}${pct}</span>`;
+    }).join('');
+    const model = a.meta && a.meta.model ? ` · ${a.meta.model}` : '';
+    return `<div class="agent">
+      <div class="row">
+        <span class="name">${escapeHtml(a.name)}</span>
+        ${badge(a.status)}
+        <span class="spacer"></span>
+        <button class="danger" style="padding:3px 8px;font-size:11px" onclick="kick('${a.id}')">kick</button>
+      </div>
+      <div class="kind">${escapeHtml(a.kind)}${escapeHtml(model)}</div>
+      ${a.progress ? `<div class="progress">⏳ ${escapeHtml(a.progress)}</div>` : ''}
+      ${asgs ? `<div class="asgs">${asgs}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderBenchmarks(s) {
+  const el = $('benchmarks');
+  $('bench-count').textContent = s.benchmarks.length ? `${s.benchmarks.length} available` : '';
+  if (!s.benchmarks.length) { el.innerHTML = '<div class="empty">No benchmarks found under the tasks directory.</div>'; return; }
+  const sel = new Set(s.selection || []);
+  el.innerHTML = s.benchmarks.map(b => `
+    <label class="bench-item">
+      <input type="checkbox" class="bench-cb" value="${b.id}" ${sel.has(b.id) ? 'checked' : ''} ${b.has_evaluator ? '' : 'disabled title="no evaluate.py"'} />
+      <span>
+        <span class="title">${escapeHtml(b.title || b.id)}</span>
+        <span class="id"> ${b.id}${b.has_evaluator ? '' : ' (no evaluator)'}</span>
+      </span>
+    </label>`).join('');
+  const waiting = s.agents.filter(a => a.status === 'waiting' || a.status === 'done').length;
+  $('sel-hint').textContent = `${sel.size} benchmark(s) selected · ${waiting} agent(s) ready · GO fans every selected benchmark across all ready agents.`;
+}
+
+function selectedBenchmarks() {
+  return Array.from(document.querySelectorAll('.bench-cb:checked')).map(c => c.value);
+}
+
+function readConfig() {
+  return {
+    model_name: $('cfg-model').value.trim(),
+    max_turns: parseInt($('cfg-turns').value, 10) || 30,
+    time_limit_secs: parseInt($('cfg-time').value, 10) || 1800,
+  };
+}
+
+function renderLeaderboard(s) {
+  const el = $('leaderboard');
+  const rows = s.leaderboard || [];
+  if (!rows.length) { el.innerHTML = '<div class="empty">No scored results yet.</div>'; return; }
+  el.innerHTML = `<table><thead><tr><th>#</th><th>Agent</th><th>Kind</th><th class="num">Benchmarks</th><th class="num">Avg accuracy</th></tr></thead><tbody>
+    ${rows.map((r, i) => `<tr>
+      <td class="rank">${i + 1}</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td class="muted">${escapeHtml(r.kind)}</td>
+      <td class="num">${r.benchmarks_scored}</td>
+      <td class="num">${r.avg_accuracy_percent.toFixed(2)}%</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+function renderMatrix(s) {
+  const el = $('matrix');
+  // Collect benchmark ids that appear in any assignment.
+  const benchSet = new Set();
+  s.agents.forEach(a => (a.assignments || []).forEach(x => benchSet.add(x.benchmark_id)));
+  const benches = Array.from(benchSet).sort();
+  const agents = s.agents.filter(a => (a.assignments || []).length);
+  if (!benches.length || !agents.length) { el.innerHTML = '<div class="empty">Run a battle to populate the matrix.</div>'; return; }
+  const head = `<tr><th>Agent</th>${benches.map(b => `<th>${b}</th>`).join('')}</tr>`;
+  const body = agents.map(a => {
+    const byBench = {};
+    (a.assignments || []).forEach(x => { byBench[x.benchmark_id] = x; });
+    const cells = benches.map(b => {
+      const x = byBench[b];
+      if (!x) return '<td class="num muted">—</td>';
+      if (x.status === 'scored') return `<td class="num">${x.accuracy_percent != null ? x.accuracy_percent.toFixed(1) : '?'}</td>`;
+      if (x.status === 'failed') return '<td class="num"><span class="badge failed">fail</span></td>';
+      return `<td class="num"><span class="badge ${x.status}">${x.status}</span></td>`;
+    }).join('');
+    return `<tr><td>${escapeHtml(a.name)}</td>${cells}</tr>`;
+  }).join('');
+  el.innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+function renderBattles(s) {
+  const el = $('battles');
+  const bs = (s.battles || []).slice().reverse();
+  $('battle-count').textContent = bs.length ? `${bs.length} total` : '';
+  if (!bs.length) { el.innerHTML = '<div class="empty">No battles yet.</div>'; return; }
+  el.innerHTML = bs.map(b => `<div class="agent">
+    <div class="row"><span class="name">${b.id}</span> ${badge(b.status === 'complete' ? 'done' : 'running')}</div>
+    <div class="kind">${b.agent_ids.length} agent(s) · ${b.benchmark_ids.join(', ')}</div>
+  </div>`).join('');
+}
+
+function render(s) {
+  STATE = s;
+  renderAgents(s);
+  renderBenchmarks(s);
+  renderLeaderboard(s);
+  renderMatrix(s);
+  renderBattles(s);
+}
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ---- actions ------------------------------------------------------------ //
+
+async function kick(id) { try { await post('/api/arena/kick', { agent_id: id }); } catch (e) {} }
+window.kick = kick;
+
+$('save-sel').onclick = async () => {
+  try {
+    await post('/api/arena/selection', { benchmark_ids: selectedBenchmarks(), config: readConfig() });
+    toast('Selection saved.');
+  } catch (e) {}
+};
+
+$('go').onclick = async () => {
+  const benches = selectedBenchmarks();
+  if (!benches.length) { toast('Select at least one benchmark first.', true); return; }
+  try {
+    // Persist selection/config, then fan out across all ready agents.
+    await post('/api/arena/selection', { benchmark_ids: benches, config: readConfig() });
+    const r = await post('/api/arena/go', { agent_ids: [], benchmark_ids: benches });
+    toast(`GO — battle ${r.battle.id} started on ${r.battle.agent_ids.length} agent(s).`);
+  } catch (e) {}
+};
+
+$('reset').onclick = async () => { try { await post('/api/arena/reset', {}); toast('Arena reset.'); } catch (e) {} };
+
+$('save-token').onclick = () => { setToken($('token').value.trim()); connect(); toast('Token applied.'); };
+
+// ---- live stream -------------------------------------------------------- //
+
+function connect() {
+  if (ES) { ES.close(); ES = null; }
+  const url = '/api/arena/stream' + (token() ? ('?token=' + encodeURIComponent(token())) : '');
+  ES = new EventSource(url);
+  ES.onopen = () => { $('livedot').classList.add('live'); $('conn').textContent = 'live'; };
+  ES.onmessage = (ev) => { try { render(JSON.parse(ev.data)); } catch (e) {} };
+  ES.onerror = () => {
+    $('livedot').classList.remove('live');
+    $('conn').textContent = token() ? 'disconnected (check token?)' : 'disconnected';
+  };
+}
+
+$('token').value = token();
+connect();
+</script>
+</body>
+</html>

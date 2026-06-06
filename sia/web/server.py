@@ -63,6 +63,48 @@ def create_app(runs_dir: str | Path):
             raise HTTPException(status_code=404, detail=f"Trajectory not found: q{qid}")
         return turns
 
+    @app.get("/api/runs/{run_name}/gens/{gen_name}/telemetry")
+    def api_gen_telemetry(run_name: str, gen_name: str):
+        data = runs_data.get_generation_telemetry(runs_root, run_name, gen_name)
+        if data is None:
+            raise HTTPException(status_code=404, detail="No telemetry found")
+        return data
+
+    @app.get("/api/runs/{run_name}/telemetry")
+    def api_run_telemetry(run_name: str):
+        data = runs_data.get_run_telemetry(runs_root, run_name)
+        if data is None:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_name}")
+        return data
+
+    @app.get("/api/runs/{run_name}/metrics")
+    def api_run_metrics(run_name: str):
+        data = runs_data.get_run_metrics_summary(runs_root, run_name)
+        if data is None:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_name}")
+        return data
+
+    @app.get("/api/runs/{run_name}/scheduler")
+    def api_scheduler_timeline(run_name: str):
+        data = runs_data.get_scheduler_timeline(runs_root, run_name)
+        if data is None:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_name}")
+        return data
+
+    @app.get("/api/runs/{run_name}/gens/{gen_name}/scheduler")
+    def api_scheduler_decision(run_name: str, gen_name: str):
+        data = runs_data.get_scheduler_decision(runs_root, run_name, gen_name)
+        if data is None:
+            raise HTTPException(status_code=404, detail="No scheduler decision found")
+        return data
+
+    @app.get("/api/runs/{run_name}/gens/{gen_name}/weights")
+    def api_weight_update(run_name: str, gen_name: str):
+        data = runs_data.get_weight_update(runs_root, run_name, gen_name)
+        if data is None:
+            raise HTTPException(status_code=404, detail="No weight update found")
+        return data
+
     @app.get("/api/runs/{run_name}/gens/{gen_name}/openhands")
     def api_openhands_sessions(run_name: str, gen_name: str):
         sessions = runs_data.list_openhands_sessions(runs_root, run_name, gen_name)
