@@ -1,0 +1,46 @@
+[package]
+name = "sia"
+version = "0.4.0"
+edition = "2021"
+description = "SIA: Self-Improving AI framework (Rust port)"
+license = "MIT"
+default-run = "sia"
+
+[[bin]]
+name = "sia"
+path = "src/bin/sia.rs"
+
+# Differential-parity helper: emits the Rust output for an operation given a JSON
+# request on stdin, so scripts/parity_check.py can diff Rust vs Python (issue #29).
+[[bin]]
+name = "sia-parity"
+path = "src/bin/sia_parity.rs"
+
+[lib]
+name = "sia"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+clap = { version = "4", features = ["derive", "string"] }
+include_dir = "0.7"
+regex = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower = { version = "0.5", features = ["util"] }
+mime_guess = "2"
+
+[dev-dependencies]
+tempfile = "3"
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+criterion = "0.5"
+
+[[bench]]
+name = "core"
+harness = false
+
+[profile.dev]
+opt-level = 0
