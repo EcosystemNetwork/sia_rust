@@ -29,6 +29,31 @@ pub fn run_web(args: &ArgMatches) -> SiaResult<()> {
     crate::web::serve(host, port, runs_dir, !no_browser)
 }
 
+/// `sia arena`: serve the agent Arena (waiting room + admin control panel).
+///
+/// The Arena shares the same axum app as `sia web`, so the runs visualizer and
+/// the `/arena` dashboard are both available. This command simply makes the
+/// Arena discoverable and lets an admin token be supplied on the CLI.
+pub fn run_arena(args: &ArgMatches) -> SiaResult<()> {
+    let host = opt_str(args, "host").unwrap_or("127.0.0.1");
+    let port = *args.get_one::<u16>("port").unwrap_or(&8000);
+    let runs_dir = opt_str(args, "runs_dir").unwrap_or(names::RUNS_ROOT);
+
+    // CLI flag wins over the environment; the server reads it from the env.
+    if let Some(token) = opt_str(args, "admin_token") {
+        std::env::set_var("SIA_ARENA_ADMIN_TOKEN", token);
+    }
+    if std::env::var("SIA_ARENA_ADMIN_TOKEN").is_err() {
+        eprintln!(
+            "  ⚠ No admin token set (SIA_ARENA_ADMIN_TOKEN / --admin-token); \
+             control endpoints are unprotected."
+        );
+    }
+
+    println!("Arena dashboard: http://{host}:{port}/arena");
+    crate::web::serve(host, port, runs_dir, false)
+}
+
 /// `sia run`: the self-improvement loop.
 ///
 /// Mirrors `sia.orchestrator.main`. Everything up to the meta-agent call is wired and

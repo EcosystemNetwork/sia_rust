@@ -132,6 +132,21 @@ fn run_dir_index(name: &str) -> Option<i64> {
     rest.parse().ok()
 }
 
+/// Synthetic sort index for an Arena run dir (`arena__*`): a large base so they
+/// sit above numeric `run_N` runs, ordered by directory mtime (newest first).
+fn arena_run_index(path: &Path, name: &str) -> Option<i64> {
+    if !name.starts_with("arena__") {
+        return None;
+    }
+    let mtime = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    Some(1_000_000_000 + mtime)
+}
+
 fn gen_dir_index(name: &str) -> Option<i64> {
     let rest = name.strip_prefix("gen_")?;
     if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {
@@ -251,7 +266,12 @@ pub fn list_runs(runs_root: &Path) -> Vec<RunSummary> {
         for entry in rd.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Some(idx) = run_dir_index(&entry.file_name().to_string_lossy()) {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if let Some(idx) = run_dir_index(&name) {
+                    runs.push(run_summary(&path, idx));
+                } else if let Some(idx) = arena_run_index(&path, &name) {
+                    // Arena battles persist runs as `arena__<battle>__<agent>`;
+                    // surface them in the visualizer above numeric runs, newest first.
                     runs.push(run_summary(&path, idx));
                 }
             }

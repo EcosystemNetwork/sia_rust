@@ -9,7 +9,7 @@ use clap::{Arg, ArgAction, ArgGroup, Command};
 use crate::config::Config;
 use crate::layout::{names, BUNDLED_TASKS};
 
-const SUBCOMMANDS: &[&str] = &["run", "web"];
+const SUBCOMMANDS: &[&str] = &["run", "web", "arena"];
 
 fn add_run_args(cmd: Command, env_config: &Config) -> Command {
     cmd.arg(
@@ -122,18 +122,57 @@ fn add_web_args(cmd: Command) -> Command {
     )
 }
 
-/// Build the top-level `sia` parser with `run` / `web` sub-commands.
+fn add_arena_args(cmd: Command) -> Command {
+    cmd.arg(
+        Arg::new("host")
+            .long("host")
+            .default_value("127.0.0.1")
+            .help("Bind host (default: 127.0.0.1)."),
+    )
+    .arg(
+        Arg::new("port")
+            .long("port")
+            .value_parser(clap::value_parser!(u16))
+            .default_value("8000")
+            .help("Bind port (default: 8000)."),
+    )
+    .arg(
+        Arg::new("runs_dir")
+            .long("runs-dir")
+            .default_value(names::RUNS_ROOT)
+            .help("Directory where Arena results are persisted (default: ./runs)."),
+    )
+    .arg(
+        Arg::new("admin_token")
+            .long("admin-token")
+            .help("Protect admin/control endpoints with this token (else \
+                   $SIA_ARENA_ADMIN_TOKEN, else unprotected)."),
+    )
+    .arg(
+        Arg::new("log_level")
+            .long("log-level")
+            .value_parser(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+            .help("Logging verbosity (default: INFO, or the $SIA_LOG_LEVEL env var)."),
+    )
+}
+
+/// Build the top-level `sia` parser with `run` / `web` / `arena` sub-commands.
 pub fn build_parser(env_config: &Config) -> Command {
     let run = add_run_args(
         Command::new("run").about("Run the orchestrator (agent evolution)."),
         env_config,
     );
     let web = add_web_args(Command::new("web").about("Serve the runs visualizer over HTTP."));
+    let arena = add_arena_args(
+        Command::new("arena")
+            .about("Serve the agent Arena: waiting room + admin benchmark control panel."),
+    );
     Command::new("sia")
         .about("SIA: Self-Improving AI framework")
-        .subcommand_value_name("{run,web}")
+        .subcommand_value_name("{run,web,arena}")
         .subcommand(run)
         .subcommand(web)
+        .subcommand(arena)
 }
 
 /// Insert the default `run` sub-command unless the user asked for one (or for help),

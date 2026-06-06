@@ -432,6 +432,212 @@ def get_openhands_events(runs_root: Path, run_name: str, gen_name: str, session:
 
 
 # --------------------------------------------------------------------------- #
+# Telemetry / metrics (issues #64, #88) — ports of the Rust web data layer
+# (src/web/runs.rs) so the Python reference server reaches feature parity with
+# the native port and the frontend's telemetry/metrics panels.
+# --------------------------------------------------------------------------- #
+_TELEMETRY_FILENAME = "telemetry.json"
+_TELEMETRY_FIELDS = ("input_tokens", "output_tokens", "num_api_calls", "num_tool_calls", "duration_ms")
+
+
+def _is_int(value: Any) -> bool:
+    """True for a JSON integer (excludes bool, which is an int subclass)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def get_generation_telemetry(runs_root: Path, run_name: str, gen_name: str) -> dict[str, Any] | None:
+    """Raw ``<gen>/telemetry.json`` for one generation, if present."""
+    gen_dir = _resolve_gen(runs_root, run_name, gen_name)
+    if gen_dir is None:
+        return None
+    data = _read_json(gen_dir / _TELEMETRY_FILENAME)
+    return data if isinstance(data, dict) else None
+
+
+def _telemetry_tokens(gen_dir: Path) -> tuple[int, int] | None:
+    """``(input, output)`` token totals from a gen's telemetry, or ``None``.
+
+    Prefers the ``cumulative`` block; falls back to summing ``generations``, then
+    to the whole object — so a file in either shape still yields totals.
+    """
+    data = _read_json(gen_dir / _TELEMETRY_FILENAME)
+    if not isinstance(data, dict):
+        return None
+
+    def token_pair(v: Any) -> tuple[int, int] | None:
+        if not isinstance(v, dict):
+            return None
+        i = v.get("input_tokens")
+        o = v.get("output_tokens")
+        i = i if _is_int(i) else None
+        o = o if _is_int(o) else None
+        if i is None and o is None:
+            return None
+        return (i or 0, o or 0)
+
+    pair = token_pair(data.get("cumulative"))
+    if pair is not None:
+        return pair
+    gens = data.get("generations")
+    if isinstance(gens, list):
+        total_in = total_out = 0
+        seen = False
+        for entry in gens:
+            p = token_pair(entry)
+            if p is not None:
+                total_in += p[0]
+                total_out += p[1]
+                seen = True
+        if seen:
+            return (total_in, total_out)
+    return token_pair(data)
+
+
+def _accumulate_telemetry(dst: dict[str, int], src: Any) -> None:
+    """Add the integer telemetry counter fields of ``src`` into ``dst``."""
+    if not isinstance(src, dict):
+        return
+    for field in _TELEMETRY_FIELDS:
+        n = src.get(field)
+        if _is_int(n):
+            dst[field] = dst.get(field, 0) + n
+
+
+def get_run_telemetry(runs_root: Path, run_name: str) -> dict[str, Any] | None:
+    """Run-level telemetry: per-generation rows plus a cumulative summary.
+
+    Reads each ``gen_<n>/telemetry.json`` and folds them into one
+    ``{generations: [...], cumulative: {...}}`` object — the same shape the
+    telemetry layer writes per generation, so the frontend consumes one endpoint.
+    Returns ``None`` only when the run does not exist.
+    """
+    run_dir = _safe_child(runs_root, run_name)
+    if run_dir is None or not _RUN_DIR_RE.match(run_name) or not run_dir.is_dir():
+        return None
+
+    generations: list[dict[str, Any]] = []
+    cumulative: dict[str, int] = {}
+    for gen_index, gen_dir in _gen_dirs(run_dir):
+        data = _read_json(gen_dir / _TELEMETRY_FILENAME)
+        if not isinstance(data, dict):
+            continue
+        # Prefer the per-gen `cumulative` block; fall back to the whole object.
+        summary = data["cumulative"] if "cumulative" in data else data
+        _accumulate_telemetry(cumulative, summary)
+        if isinstance(summary, dict):
+            row = dict(summary)
+            row["generation"] = gen_index
+            generations.append(row)
+    cumulative["generation"] = len(generations)
+
+    return {"run": run_name, "generations": generations, "cumulative": cumulative}
+
+
+def get_run_metrics_summary(runs_root: Path, run_name: str) -> dict[str, Any] | None:
+    """Compact per-generation series for charting score and token usage.
+
+    Emits ``{generation, score, input_tokens?, output_tokens?, total_tokens?}``
+    per generation (token fields omitted when no telemetry is present, so the
+    series degrades gracefully) plus a ``totals`` block. ``None`` only when the
+    run directory does not exist.
+    """
+    run_dir = _safe_child(runs_root, run_name)
+    if run_dir is None or not _RUN_DIR_RE.match(run_name) or not run_dir.is_dir():
+        return None
+
+    generations: list[dict[str, Any]] = []
+    total_input = total_output = 0
+    any_tokens = False
+    best_score: float | None = None
+
+    for gen_index, gen_dir in _gen_dirs(run_dir):
+        ev = _eval_summary(gen_dir)
+        score = ev.accuracy_percent if ev else None
+        if score is not None:
+            best_score = score if best_score is None else max(best_score, score)
+        row: dict[str, Any] = {"generation": gen_index, "score": score}
+        pair = _telemetry_tokens(gen_dir)
+        if pair is not None:
+            any_tokens = True
+            total_input += pair[0]
+            total_output += pair[1]
+            row["input_tokens"] = pair[0]
+            row["output_tokens"] = pair[1]
+            row["total_tokens"] = pair[0] + pair[1]
+        generations.append(row)
+
+    totals: dict[str, Any] = {"num_generations": len(generations), "best_score": best_score}
+    if any_tokens:
+        totals["input_tokens"] = total_input
+        totals["output_tokens"] = total_output
+        totals["total_tokens"] = total_input + total_output
+
+    return {"run": run_name, "generations": generations, "totals": totals}
+
+
+# --------------------------------------------------------------------------- #
+# Closed-loop artifacts (issues #84, #85)
+# --------------------------------------------------------------------------- #
+_SCHEDULER_DECISION_FILENAME = "scheduler_decision.json"
+_WEIGHT_UPDATE_FILENAME = "weight_update.json"
+_SCHEDULER_ROW_KEYS = (
+    "decision", "recommended_next", "harness_efficiency",
+    "weight_efficiency", "harness_plateaued", "rationale",
+)
+
+
+def get_scheduler_decision(runs_root: Path, run_name: str, gen_name: str) -> dict[str, Any] | None:
+    """Raw ``<gen>/scheduler_decision.json`` for one generation, if present."""
+    gen_dir = _resolve_gen(runs_root, run_name, gen_name)
+    if gen_dir is None:
+        return None
+    data = _read_json(gen_dir / _SCHEDULER_DECISION_FILENAME)
+    return data if isinstance(data, dict) else None
+
+
+def get_weight_update(runs_root: Path, run_name: str, gen_name: str) -> dict[str, Any] | None:
+    """Raw ``<gen>/weight_update.json`` for one generation, if present."""
+    gen_dir = _resolve_gen(runs_root, run_name, gen_name)
+    if gen_dir is None:
+        return None
+    data = _read_json(gen_dir / _WEIGHT_UPDATE_FILENAME)
+    return data if isinstance(data, dict) else None
+
+
+def get_scheduler_timeline(runs_root: Path, run_name: str) -> dict[str, Any] | None:
+    """Run-level scheduler-decision timeline.
+
+    Folds each generation's ``scheduler_decision.json`` into an ordered list with
+    harness/weight/both tallies, so the dashboard renders the decision sequence in
+    one request. Returns ``Some`` with ``decisions: []`` when the run exists but
+    nothing is recorded yet, ``None`` only when the run does not resolve.
+    """
+    run_dir = _safe_child(runs_root, run_name)
+    if run_dir is None or not _RUN_DIR_RE.match(run_name) or not run_dir.is_dir():
+        return None
+
+    decisions: list[dict[str, Any]] = []
+    counts = {"harness": 0, "weight": 0, "both": 0}
+    for gen_index, gen_dir in _gen_dirs(run_dir):
+        data = _read_json(gen_dir / _SCHEDULER_DECISION_FILENAME)
+        if not isinstance(data, dict):
+            continue
+        decision = data.get("decision")
+        if isinstance(decision, str):
+            key = decision.lower()
+            if key in counts:
+                counts[key] += 1
+        gen = data.get("generation")
+        row: dict[str, Any] = {"generation": gen if _is_int(gen) else gen_index}
+        for key in _SCHEDULER_ROW_KEYS:
+            if key in data:
+                row[key] = data[key]
+        decisions.append(row)
+
+    return {"run": run_name, "decisions": decisions, "counts": counts, "total": len(decisions)}
+
+
+# --------------------------------------------------------------------------- #
 # Path safety
 # --------------------------------------------------------------------------- #
 def _safe_child(parent: Path, name: str) -> Path | None:

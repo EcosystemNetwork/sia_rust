@@ -4,6 +4,7 @@
 
 pub mod agent_impls;
 pub mod agent_reference;
+pub mod arena;
 pub mod api_keys;
 pub mod assets;
 pub mod cli;

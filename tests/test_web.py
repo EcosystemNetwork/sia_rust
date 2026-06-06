@@ -61,6 +61,56 @@ def runs_root(tmp_path: Path) -> Path:
     )
 
     (gen2 / "improvement.md").write_text("# Plan\n- do better\n", encoding="utf-8")
+
+    # Telemetry per generation (issue #64/#88): the {generations, cumulative}
+    # shape the telemetry layer writes; the run-level endpoints fold these.
+    (gen1 / "telemetry.json").write_text(
+        json.dumps(
+            {
+                "generations": [
+                    {"generation": 1, "input_tokens": 100, "output_tokens": 40,
+                     "num_api_calls": 3, "num_tool_calls": 5, "duration_ms": 1200}
+                ],
+                "cumulative": {"generation": 1, "input_tokens": 100, "output_tokens": 40,
+                               "num_api_calls": 3, "num_tool_calls": 5, "duration_ms": 1200},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (gen2 / "telemetry.json").write_text(
+        json.dumps(
+            {
+                "generations": [
+                    {"generation": 2, "input_tokens": 200, "output_tokens": 60,
+                     "num_api_calls": 4, "num_tool_calls": 7, "duration_ms": 1800}
+                ],
+                "cumulative": {"generation": 2, "input_tokens": 200, "output_tokens": 60,
+                               "num_api_calls": 4, "num_tool_calls": 7, "duration_ms": 1800},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Closed-loop artifacts (issue #84/#85): a weight decision + its update on gen 2.
+    (gen2 / "scheduler_decision.json").write_text(
+        json.dumps(
+            {
+                "generation": 2, "decision": "weight", "recommended_next": "harness",
+                "harness_efficiency": 0.01, "weight_efficiency": 0.05,
+                "harness_plateaued": True, "rationale": "harness plateaued; try weights",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (gen2 / "weight_update.json").write_text(
+        json.dumps(
+            {
+                "generation": 2, "kind": "lora", "updater": "demo", "num_examples": 12,
+                "loss_before": 0.9, "loss_after": 0.6, "updated": True, "details": "ok",
+            }
+        ),
+        encoding="utf-8",
+    )
     return root
 
 
@@ -122,6 +172,58 @@ def test_path_traversal_is_blocked(runs_root, evil):
     assert rd._resolve_gen(runs_root, "run_7", evil) is None
 
 
+def test_run_telemetry_folds_generations(runs_root):
+    tele = rd.get_run_telemetry(runs_root, "run_7")
+    assert tele is not None
+    assert len(tele["generations"]) == 2
+    c = tele["cumulative"]
+    assert c["input_tokens"] == 300  # 100 + 200
+    assert c["output_tokens"] == 100  # 40 + 60
+    assert c["num_api_calls"] == 7
+    assert c["num_tool_calls"] == 12
+    assert c["duration_ms"] == 3000
+    assert c["generation"] == 2  # number of gens folded
+    assert rd.get_run_telemetry(runs_root, "run_999") is None
+
+
+def test_run_metrics_summary_series(runs_root):
+    metrics = rd.get_run_metrics_summary(runs_root, "run_7")
+    assert metrics is not None
+    rows = metrics["generations"]
+    assert [r["generation"] for r in rows] == [1, 2]
+    g1 = rows[0]
+    assert g1["score"] == 50.0
+    assert g1["total_tokens"] == 140  # 100 + 40
+    assert rows[1]["score"] is None  # gen_2 has no eval
+    totals = metrics["totals"]
+    assert totals["num_generations"] == 2
+    assert totals["best_score"] == 50.0
+    assert totals["total_tokens"] == 400  # 140 + 260
+    assert rd.get_run_metrics_summary(runs_root, "run_999") is None
+
+
+def test_scheduler_decision_and_weights(runs_root):
+    decision = rd.get_scheduler_decision(runs_root, "run_7", "gen_2")
+    assert decision is not None and decision["decision"] == "weight"
+    assert decision["harness_plateaued"] is True
+    weights = rd.get_weight_update(runs_root, "run_7", "gen_2")
+    assert weights is not None and weights["num_examples"] == 12
+    assert weights["loss_before"] == 0.9 and weights["loss_after"] == 0.6
+    # gen_1 has neither artifact.
+    assert rd.get_scheduler_decision(runs_root, "run_7", "gen_1") is None
+    assert rd.get_weight_update(runs_root, "run_7", "gen_1") is None
+
+
+def test_scheduler_timeline(runs_root):
+    timeline = rd.get_scheduler_timeline(runs_root, "run_7")
+    assert timeline is not None
+    assert timeline["total"] == 1
+    assert timeline["counts"] == {"harness": 0, "weight": 1, "both": 0}
+    assert timeline["decisions"][0]["generation"] == 2
+    assert timeline["decisions"][0]["rationale"].startswith("harness plateaued")
+    assert rd.get_scheduler_timeline(runs_root, "run_999") is None
+
+
 def test_api_endpoints(runs_root):
     from fastapi.testclient import TestClient
 
@@ -134,5 +236,12 @@ def test_api_endpoints(runs_root):
     assert len(client.get("/api/runs/run_7/gens/gen_1/eval").json()) == 4
     assert "hello" in client.get("/api/runs/run_7/gens/gen_1/artifact/target_agent").text
     assert client.get("/api/runs/run_7/gens/gen_1/trajectory/1").json()[0]["role"] == "system"
+    assert client.get("/api/runs/run_7/telemetry").json()["cumulative"]["input_tokens"] == 300
+    assert client.get("/api/runs/run_7/metrics").json()["totals"]["best_score"] == 50.0
+    assert client.get("/api/runs/run_7/scheduler").json()["total"] == 1
+    assert client.get("/api/runs/run_7/gens/gen_2/scheduler").json()["decision"] == "weight"
+    assert client.get("/api/runs/run_7/gens/gen_2/weights").json()["num_examples"] == 12
+    assert client.get("/api/runs/run_7/gens/gen_2/telemetry").json()["cumulative"]["output_tokens"] == 60
+    assert client.get("/api/runs/run_7/gens/gen_1/scheduler").status_code == 404
     assert client.get("/api/runs/run_404").status_code == 404
     assert client.get("/").status_code == 200
