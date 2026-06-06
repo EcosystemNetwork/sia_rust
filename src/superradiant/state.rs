@@ -1,10 +1,10 @@
-//! In-memory state for the agent Arena: a waiting room of connected agents plus
+//! In-memory state for the agent Superradiant: a waiting room of connected agents plus
 //! the admin-driven "battle" coordinator that fans benchmark assignments out to
 //! many agents at once.
 //!
-//! The Arena is a layer on top of the existing runs visualizer. It owns no
+//! The Superradiant is a layer on top of the existing runs visualizer. It owns no
 //! durable storage of its own: every scored assignment is persisted into the
-//! standard `runs/` layout (see [`crate::arena::eval`]) so the existing SIA
+//! standard `runs/` layout (see [`crate::superradiant::eval`]) so the existing SIA
 //! Studio dashboard renders trajectories and accuracy for free. This module is
 //! purely the live coordination state — who is connected, what they have been
 //! told to run, and how far along they are.
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
 
-use crate::arena::benchmarks::{discover_benchmarks, BenchmarkRef};
+use crate::superradiant::benchmarks::{discover_benchmarks, BenchmarkRef};
 
 /// How long an agent may go without a heartbeat before it is considered stale
 /// and dropped from the waiting room.
@@ -123,7 +123,7 @@ pub struct BattleSession {
 
 /// Suggested run configuration the admin sets and agents read at pickup time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ArenaRunConfig {
+pub struct SuperradiantRunConfig {
     /// Suggested model id (agents may honor or ignore it).
     #[serde(default)]
     pub model_name: String,
@@ -140,9 +140,9 @@ fn default_time_limit() -> u64 {
     1800
 }
 
-impl Default for ArenaRunConfig {
+impl Default for SuperradiantRunConfig {
     fn default() -> Self {
-        ArenaRunConfig {
+        SuperradiantRunConfig {
             model_name: String::new(),
             max_turns: default_max_turns(),
             time_limit_secs: default_time_limit(),
@@ -156,7 +156,7 @@ pub struct DispatchedAssignment {
     pub assignment_id: String,
     pub battle_id: String,
     pub benchmark_id: String,
-    pub config: ArenaRunConfig,
+    pub config: SuperradiantRunConfig,
 }
 
 /// Reply to an agent heartbeat.
@@ -186,18 +186,18 @@ pub struct AssignmentOutcome {
 }
 
 /// Mutable inner state guarded by a mutex.
-struct ArenaInner {
+struct SuperradiantInner {
     agents: HashMap<String, AgentSession>,
     benchmarks: Vec<BenchmarkRef>,
     selection: Vec<String>,
-    config: ArenaRunConfig,
+    config: SuperradiantRunConfig,
     battles: Vec<BattleSession>,
     seq: u64,
 }
 
-/// Errors surfaced by Arena operations (mapped to HTTP status in the route layer).
+/// Errors surfaced by Superradiant operations (mapped to HTTP status in the route layer).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ArenaError {
+pub enum SuperradiantError {
     UnknownAgent,
     BadToken,
     UnknownAssignment,
@@ -205,9 +205,9 @@ pub enum ArenaError {
     Forbidden,
 }
 
-/// Shared, cloneable handle to the Arena. All mutation goes through `&self`.
-pub struct ArenaHandle {
-    inner: Mutex<ArenaInner>,
+/// Shared, cloneable handle to the Superradiant. All mutation goes through `&self`.
+pub struct SuperradiantHandle {
+    inner: Mutex<SuperradiantInner>,
     events: broadcast::Sender<String>,
     pub runs_root: PathBuf,
     /// When set, admin/control endpoints require a matching `X-Admin-Token`.
@@ -221,17 +221,17 @@ fn now_ms() -> u128 {
         .unwrap_or(0)
 }
 
-impl ArenaHandle {
+impl SuperradiantHandle {
     /// Build a handle, discovering selectable benchmarks up front.
     pub fn new(runs_root: impl Into<PathBuf>, admin_token: Option<String>) -> std::sync::Arc<Self> {
         let (events, _rx) = broadcast::channel(256);
         let benchmarks = discover_benchmarks();
-        std::sync::Arc::new(ArenaHandle {
-            inner: Mutex::new(ArenaInner {
+        std::sync::Arc::new(SuperradiantHandle {
+            inner: Mutex::new(SuperradiantInner {
                 agents: HashMap::new(),
                 benchmarks,
                 selection: Vec::new(),
-                config: ArenaRunConfig::default(),
+                config: SuperradiantRunConfig::default(),
                 battles: Vec::new(),
                 seq: 0,
             }),
@@ -247,14 +247,14 @@ impl ArenaHandle {
     }
 
     /// Validate an admin token against the configured one (no-op if unset).
-    pub fn check_admin(&self, provided: Option<&str>) -> Result<(), ArenaError> {
+    pub fn check_admin(&self, provided: Option<&str>) -> Result<(), SuperradiantError> {
         match &self.admin_token {
             None => Ok(()),
             Some(expected) => {
                 if provided == Some(expected.as_str()) {
                     Ok(())
                 } else {
-                    Err(ArenaError::Forbidden)
+                    Err(SuperradiantError::Forbidden)
                 }
             }
         }
@@ -278,7 +278,11 @@ impl ArenaHandle {
         let session = AgentSession {
             id: id.clone(),
             name,
-            kind: if kind.is_empty() { "agent".into() } else { kind.into() },
+            kind: if kind.is_empty() {
+                "agent".into()
+            } else {
+                kind.into()
+            },
             token: token.clone(),
             status: AgentStatus::Waiting,
             registered_at_ms: now,
@@ -300,14 +304,17 @@ impl ArenaHandle {
         agent_id: &str,
         token: &str,
         progress: Option<String>,
-    ) -> Result<HeartbeatReply, ArenaError> {
+    ) -> Result<HeartbeatReply, SuperradiantError> {
         let mut g = self.inner.lock().unwrap();
         self.prune_stale(&mut g);
         let config = g.config.clone();
 
-        let agent = g.agents.get_mut(agent_id).ok_or(ArenaError::UnknownAgent)?;
+        let agent = g
+            .agents
+            .get_mut(agent_id)
+            .ok_or(SuperradiantError::UnknownAgent)?;
         if agent.token != token {
-            return Err(ArenaError::BadToken);
+            return Err(SuperradiantError::BadToken);
         }
         agent.last_heartbeat_ms = now_ms();
         if let Some(p) = progress {
@@ -345,18 +352,21 @@ impl ArenaHandle {
         agent_id: &str,
         token: &str,
         assignment_id: &str,
-    ) -> Result<ResultContext, ArenaError> {
+    ) -> Result<ResultContext, SuperradiantError> {
         let g = self.inner.lock().unwrap();
-        let agent = g.agents.get(agent_id).ok_or(ArenaError::UnknownAgent)?;
+        let agent = g
+            .agents
+            .get(agent_id)
+            .ok_or(SuperradiantError::UnknownAgent)?;
         if agent.token != token {
-            return Err(ArenaError::BadToken);
+            return Err(SuperradiantError::BadToken);
         }
         let (idx, a) = agent
             .history
             .iter()
             .enumerate()
             .find(|(_, a)| a.id == assignment_id)
-            .ok_or(ArenaError::UnknownAssignment)?;
+            .ok_or(SuperradiantError::UnknownAssignment)?;
         Ok(ResultContext {
             agent_name: agent.name.clone(),
             battle_id: a.battle_id.clone(),
@@ -371,15 +381,18 @@ impl ArenaHandle {
         agent_id: &str,
         assignment_id: &str,
         outcome: AssignmentOutcome,
-    ) -> Result<(), ArenaError> {
+    ) -> Result<(), SuperradiantError> {
         let mut g = self.inner.lock().unwrap();
         {
-            let agent = g.agents.get_mut(agent_id).ok_or(ArenaError::UnknownAgent)?;
+            let agent = g
+                .agents
+                .get_mut(agent_id)
+                .ok_or(SuperradiantError::UnknownAgent)?;
             let a = agent
                 .history
                 .iter_mut()
                 .find(|a| a.id == assignment_id)
-                .ok_or(ArenaError::UnknownAssignment)?;
+                .ok_or(SuperradiantError::UnknownAssignment)?;
             a.finished_ms = Some(now_ms());
             a.accuracy_percent = outcome.accuracy_percent;
             a.run_dir = outcome.run_dir;
@@ -415,12 +428,12 @@ impl ArenaHandle {
     pub fn set_selection(
         &self,
         benchmark_ids: Vec<String>,
-        config: Option<ArenaRunConfig>,
-    ) -> Result<(), ArenaError> {
+        config: Option<SuperradiantRunConfig>,
+    ) -> Result<(), SuperradiantError> {
         let mut g = self.inner.lock().unwrap();
         for id in &benchmark_ids {
             if !g.benchmarks.iter().any(|b| &b.id == id) {
-                return Err(ArenaError::UnknownBenchmark);
+                return Err(SuperradiantError::UnknownBenchmark);
             }
         }
         g.selection = benchmark_ids;
@@ -438,7 +451,7 @@ impl ArenaHandle {
         &self,
         agent_ids: Vec<String>,
         benchmark_ids: Vec<String>,
-    ) -> Result<BattleSession, ArenaError> {
+    ) -> Result<BattleSession, SuperradiantError> {
         let mut g = self.inner.lock().unwrap();
 
         let benches = if benchmark_ids.is_empty() {
@@ -447,11 +460,11 @@ impl ArenaHandle {
             benchmark_ids
         };
         if benches.is_empty() {
-            return Err(ArenaError::UnknownBenchmark);
+            return Err(SuperradiantError::UnknownBenchmark);
         }
         for id in &benches {
             if !g.benchmarks.iter().any(|b| &b.id == id) {
-                return Err(ArenaError::UnknownBenchmark);
+                return Err(SuperradiantError::UnknownBenchmark);
             }
         }
 
@@ -465,7 +478,7 @@ impl ArenaHandle {
             agent_ids
         };
         if targets.is_empty() {
-            return Err(ArenaError::UnknownAgent);
+            return Err(SuperradiantError::UnknownAgent);
         }
 
         g.seq += 1;
@@ -473,7 +486,9 @@ impl ArenaHandle {
         let mut assigned_agents = Vec::new();
 
         for aid in &targets {
-            let Some(agent) = g.agents.get(aid) else { continue };
+            let Some(agent) = g.agents.get(aid) else {
+                continue;
+            };
             // Skip agents that are mid-run.
             if agent.status == AgentStatus::Running {
                 continue;
@@ -482,11 +497,7 @@ impl ArenaHandle {
             for bid in &benches {
                 g.seq += 1;
                 let asg_id = format!("asg_{:x}", g.seq);
-                new_queue.push_back(Assignment::new(
-                    asg_id,
-                    battle_id.clone(),
-                    bid.clone(),
-                ));
+                new_queue.push_back(Assignment::new(asg_id, battle_id.clone(), bid.clone()));
             }
             // Re-borrow mutably now that ids are minted.
             if let Some(agent) = g.agents.get_mut(aid) {
@@ -532,7 +543,7 @@ impl ArenaHandle {
         self.snapshot_locked(&g)
     }
 
-    fn snapshot_locked(&self, g: &ArenaInner) -> Value {
+    fn snapshot_locked(&self, g: &SuperradiantInner) -> Value {
         let mut agents: Vec<Value> = g
             .agents
             .values()
@@ -550,7 +561,11 @@ impl ArenaHandle {
                 })
             })
             .collect();
-        agents.sort_by_key(|v| v.get("registered_at_ms").and_then(|x| x.as_u64()).unwrap_or(0));
+        agents.sort_by_key(|v| {
+            v.get("registered_at_ms")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0)
+        });
 
         // Leaderboard: best accuracy per agent across the latest battle.
         let leaderboard = self.leaderboard(g);
@@ -566,7 +581,7 @@ impl ArenaHandle {
         })
     }
 
-    fn leaderboard(&self, g: &ArenaInner) -> Vec<Value> {
+    fn leaderboard(&self, g: &SuperradiantInner) -> Vec<Value> {
         let mut rows: Vec<Value> = Vec::new();
         for a in g.agents.values() {
             let scored: Vec<&Assignment> = a
@@ -577,11 +592,11 @@ impl ArenaHandle {
             if scored.is_empty() {
                 continue;
             }
-            let total: f64 = scored
+            let total: f64 = scored.iter().filter_map(|x| x.accuracy_percent).sum();
+            let count = scored
                 .iter()
-                .filter_map(|x| x.accuracy_percent)
-                .sum();
-            let count = scored.iter().filter(|x| x.accuracy_percent.is_some()).count();
+                .filter(|x| x.accuracy_percent.is_some())
+                .count();
             let avg = if count > 0 { total / count as f64 } else { 0.0 };
             rows.push(json!({
                 "agent_id": a.id,
@@ -592,8 +607,14 @@ impl ArenaHandle {
             }));
         }
         rows.sort_by(|x, y| {
-            let ax = x.get("avg_accuracy_percent").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let ay = y.get("avg_accuracy_percent").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let ax = x
+                .get("avg_accuracy_percent")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let ay = y
+                .get("avg_accuracy_percent")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             ay.partial_cmp(&ax).unwrap_or(std::cmp::Ordering::Equal)
         });
         rows
@@ -601,26 +622,23 @@ impl ArenaHandle {
 
     // --- internals ------------------------------------------------------- //
 
-    fn refresh_battle_status(&self, g: &mut ArenaInner) {
+    fn refresh_battle_status(&self, g: &mut SuperradiantInner) {
         // A battle is complete once no agent has pending/running work for it.
         let active_battles: std::collections::HashSet<String> = g
             .agents
             .values()
             .flat_map(|a| {
-                a.queue
-                    .iter()
-                    .map(|x| x.battle_id.clone())
-                    .chain(
-                        a.history
-                            .iter()
-                            .filter(|x| {
-                                matches!(
-                                    x.status,
-                                    AssignmentStatus::Pending | AssignmentStatus::Running
-                                )
-                            })
-                            .map(|x| x.battle_id.clone()),
-                    )
+                a.queue.iter().map(|x| x.battle_id.clone()).chain(
+                    a.history
+                        .iter()
+                        .filter(|x| {
+                            matches!(
+                                x.status,
+                                AssignmentStatus::Pending | AssignmentStatus::Running
+                            )
+                        })
+                        .map(|x| x.battle_id.clone()),
+                )
             })
             .collect();
         for b in g.battles.iter_mut() {
@@ -630,7 +648,7 @@ impl ArenaHandle {
         }
     }
 
-    fn prune_stale(&self, g: &mut ArenaInner) {
+    fn prune_stale(&self, g: &mut SuperradiantInner) {
         let now = now_ms();
         // Never drop an agent that is mid-run; only idle stragglers.
         g.agents.retain(|_, a| {
@@ -641,7 +659,7 @@ impl ArenaHandle {
         });
     }
 
-    fn broadcast(&self, g: &ArenaInner) {
+    fn broadcast(&self, g: &SuperradiantInner) {
         let snap = self.snapshot_locked(g);
         // Best-effort: a send error just means no current subscribers.
         let _ = self.events.send(snap.to_string());
@@ -652,8 +670,8 @@ impl ArenaHandle {
 mod tests {
     use super::*;
 
-    fn handle() -> std::sync::Arc<ArenaHandle> {
-        ArenaHandle::new(std::env::temp_dir(), None)
+    fn handle() -> std::sync::Arc<SuperradiantHandle> {
+        SuperradiantHandle::new(std::env::temp_dir(), None)
     }
 
     #[test]
@@ -669,7 +687,10 @@ mod tests {
     fn bad_token_rejected() {
         let h = handle();
         let (id, _token) = h.register("a", "agent", json!({}));
-        assert_eq!(h.heartbeat(&id, "nope", None).unwrap_err(), ArenaError::BadToken);
+        assert_eq!(
+            h.heartbeat(&id, "nope", None).unwrap_err(),
+            SuperradiantError::BadToken
+        );
     }
 
     #[test]
@@ -693,12 +714,13 @@ mod tests {
         let h = handle();
         let (id, _t) = h.register("a", "agent", json!({}));
         assert_eq!(
-            h.go(vec![id], vec!["does-not-exist-xyz".into()]).unwrap_err(),
-            ArenaError::UnknownBenchmark
+            h.go(vec![id], vec!["does-not-exist-xyz".into()])
+                .unwrap_err(),
+            SuperradiantError::UnknownBenchmark
         );
     }
 
-    fn first_benchmark_id(h: &ArenaHandle) -> Option<String> {
+    fn first_benchmark_id(h: &SuperradiantHandle) -> Option<String> {
         let snap = h.snapshot();
         snap.get("benchmarks")
             .and_then(|b| b.as_array())

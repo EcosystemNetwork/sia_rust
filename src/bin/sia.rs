@@ -47,7 +47,7 @@ fn main() {
 
     let result = match matches.subcommand() {
         Some(("web", sm)) => sia::run::run_web(sm),
-        Some(("arena", sm)) => sia::run::run_arena(sm),
+        Some(("superradiant", sm)) => sia::run::run_superradiant(sm),
         Some(("run", sm)) => sia::run::run_orchestrator(sm, &env_config),
         _ => Ok(()),
     };

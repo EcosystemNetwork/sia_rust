@@ -132,10 +132,10 @@ fn run_dir_index(name: &str) -> Option<i64> {
     rest.parse().ok()
 }
 
-/// Synthetic sort index for an Arena run dir (`arena__*`): a large base so they
+/// Synthetic sort index for an Superradiant run dir (`superradiant__*`): a large base so they
 /// sit above numeric `run_N` runs, ordered by directory mtime (newest first).
-fn arena_run_index(path: &Path, name: &str) -> Option<i64> {
-    if !name.starts_with("arena__") {
+fn superradiant_run_index(path: &Path, name: &str) -> Option<i64> {
+    if !name.starts_with("superradiant__") {
         return None;
     }
     let mtime = std::fs::metadata(path)
@@ -269,8 +269,8 @@ pub fn list_runs(runs_root: &Path) -> Vec<RunSummary> {
                 let name = entry.file_name().to_string_lossy().into_owned();
                 if let Some(idx) = run_dir_index(&name) {
                     runs.push(run_summary(&path, idx));
-                } else if let Some(idx) = arena_run_index(&path, &name) {
-                    // Arena battles persist runs as `arena__<battle>__<agent>`;
+                } else if let Some(idx) = superradiant_run_index(&path, &name) {
+                    // Superradiant battles persist runs as `superradiant__<battle>__<agent>`;
                     // surface them in the visualizer above numeric runs, newest first.
                     runs.push(run_summary(&path, idx));
                 }

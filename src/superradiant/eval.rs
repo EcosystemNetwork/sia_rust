@@ -2,9 +2,9 @@
 //! with the benchmark's own `evaluate.py`.
 //!
 //! By reusing the run-directory shape (`gen_<n>/submission.json`,
-//! `agent_execution/`, `results.json`, `telemetry.json`) the Arena results show
+//! `agent_execution/`, `results.json`, `telemetry.json`) the Superradiant results show
 //! up in the existing SIA Studio dashboard with no extra wiring: each agent gets
-//! a run named `arena__<battle>__<agent>` whose generations are the benchmarks.
+//! a run named `superradiant__<battle>__<agent>` whose generations are the benchmarks.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -13,18 +13,18 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use crate::arena::benchmarks;
-use crate::arena::state::AssignmentOutcome;
 use crate::layout::names;
+use crate::superradiant::benchmarks;
+use crate::superradiant::state::AssignmentOutcome;
 
-/// The python interpreter used to run `evaluate.py` (`$SIA_ARENA_PYTHON` else `python3`).
-fn arena_python() -> String {
-    std::env::var("SIA_ARENA_PYTHON").unwrap_or_else(|_| "python3".to_string())
+/// The python interpreter used to run `evaluate.py` (`$SUPERRADIANT_PYTHON` else `python3`).
+fn eval_python() -> String {
+    std::env::var("SUPERRADIANT_PYTHON").unwrap_or_else(|_| "python3".to_string())
 }
 
-/// Seconds before an evaluation subprocess is killed (`$SIA_ARENA_EVAL_TIMEOUT`, default 600).
+/// Seconds before an evaluation subprocess is killed (`$SUPERRADIANT_EVAL_TIMEOUT`, default 600).
 fn eval_timeout_secs() -> u64 {
-    std::env::var("SIA_ARENA_EVAL_TIMEOUT")
+    std::env::var("SUPERRADIANT_EVAL_TIMEOUT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(600)
@@ -33,7 +33,13 @@ fn eval_timeout_secs() -> u64 {
 fn sanitize(s: &str) -> String {
     let mut out: String = s
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
     if out.is_empty() {
         out.push_str("agent");
@@ -78,7 +84,11 @@ pub fn persist_and_score(
         }
     };
 
-    let run_name = format!("arena__{}__{}", sanitize(battle_id), sanitize(agent_name));
+    let run_name = format!(
+        "superradiant__{}__{}",
+        sanitize(battle_id),
+        sanitize(agent_name)
+    );
     let run_dir = runs_root.join(&run_name);
     if let Err(e) = std::fs::create_dir_all(&run_dir) {
         return outcome_err(format!("could not create run dir: {e}"));
@@ -98,7 +108,7 @@ pub fn persist_and_score(
     // A small marker so the dashboard's generation list is legible.
     let _ = std::fs::write(
         gen_dir.join(names::IMPROVEMENT_MD),
-        format!("# Arena: {benchmark_id}\n\nAgent: {agent_name}\nBattle: {battle_id}\n"),
+        format!("# Superradiant: {benchmark_id}\n\nAgent: {agent_name}\nBattle: {battle_id}\n"),
     );
 
     // Optional trajectory for the dashboard's trajectory viewer.
@@ -124,7 +134,7 @@ fn score(gen_dir: &str, task_dir: &str) -> AssignmentOutcome {
         None => return outcome_err("evaluate.py not found for benchmark".into()),
     };
     let cmd = vec![
-        arena_python(),
+        eval_python(),
         script,
         "--gen-dir".to_string(),
         gen_dir.to_string(),
@@ -132,9 +142,16 @@ fn score(gen_dir: &str, task_dir: &str) -> AssignmentOutcome {
     let log_path = format!("{gen_dir}/{}", names::EVAL_LOG);
 
     match run_with_timeout(&cmd, eval_timeout_secs()) {
-        EvalRun::TimedOut => outcome_err(format!("evaluation timed out after {}s", eval_timeout_secs())),
+        EvalRun::TimedOut => outcome_err(format!(
+            "evaluation timed out after {}s",
+            eval_timeout_secs()
+        )),
         EvalRun::SpawnError(e) => outcome_err(format!("could not run evaluate.py: {e}")),
-        EvalRun::Completed { code, stdout, stderr } => {
+        EvalRun::Completed {
+            code,
+            stdout,
+            stderr,
+        } => {
             let _ = std::fs::write(&log_path, format!("{stdout}{stderr}"));
             if code != 0 {
                 return outcome_err(format!("evaluate.py exited with code {code}"));
@@ -160,7 +177,9 @@ fn read_accuracy(path: &str) -> Option<f64> {
     if let Some(p) = v.get("accuracy_percent").and_then(|x| x.as_f64()) {
         return Some(p);
     }
-    v.get("accuracy").and_then(|x| x.as_f64()).map(|a| a * 100.0)
+    v.get("accuracy")
+        .and_then(|x| x.as_f64())
+        .map(|a| a * 100.0)
 }
 
 fn write_agent_execution(gen_dir: &Path, exec: &Value) {
@@ -178,7 +197,10 @@ fn write_agent_execution(gen_dir: &Path, exec: &Value) {
             .get("question_id")
             .and_then(|v| v.as_i64())
             .unwrap_or(i as i64);
-        let _ = write_json(&dir.join(format!("{}{qid}.json", names::EXECUTION_GLOB_PREFIX)), item);
+        let _ = write_json(
+            &dir.join(format!("{}{qid}.json", names::EXECUTION_GLOB_PREFIX)),
+            item,
+        );
     }
 }
 
@@ -195,7 +217,11 @@ fn outcome_err(msg: String) -> AssignmentOutcome {
 }
 
 enum EvalRun {
-    Completed { code: i32, stdout: String, stderr: String },
+    Completed {
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
     TimedOut,
     SpawnError(String),
 }
@@ -239,7 +265,11 @@ fn run_with_timeout(cmd: &[String], timeout_secs: u64) -> EvalRun {
         Ok(Ok(code)) => {
             let (so, se) = reader.join().unwrap_or_default();
             let _ = waiter.join();
-            EvalRun::Completed { code, stdout: so, stderr: se }
+            EvalRun::Completed {
+                code,
+                stdout: so,
+                stderr: se,
+            }
         }
         Ok(Err(e)) => EvalRun::SpawnError(e.to_string()),
         Err(_) => {
@@ -266,7 +296,15 @@ mod tests {
     #[test]
     fn unknown_benchmark_errors_cleanly() {
         let tmp = std::env::temp_dir();
-        let out = persist_and_score(&tmp, "b1", "agent", "nope-xyz", &serde_json::json!({}), None, None);
+        let out = persist_and_score(
+            &tmp,
+            "b1",
+            "agent",
+            "nope-xyz",
+            &serde_json::json!({}),
+            None,
+            None,
+        );
         assert!(out.error.is_some());
         assert!(out.accuracy_percent.is_none());
     }

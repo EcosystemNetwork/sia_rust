@@ -1,4 +1,4 @@
-//! Benchmark discovery for the Arena.
+//! Benchmark discovery for the Superradiant.
 //!
 //! A "benchmark" is just a SIA task directory (the same ones `sia run --task`
 //! uses): a folder containing `data/public/task.md` and `data/public/evaluate.py`.
@@ -102,7 +102,10 @@ pub fn public_files(id: &str) -> Vec<String> {
 pub fn read_public_file(id: &str, rel: &str) -> Option<Vec<u8>> {
     let dir = task_dir_for(id)?;
     // Reject traversal / absolute components.
-    if rel.split(['/', '\\']).any(|c| c == ".." || c.is_empty() || c == ".") {
+    if rel
+        .split(['/', '\\'])
+        .any(|c| c == ".." || c.is_empty() || c == ".")
+    {
         return None;
     }
     if Path::new(rel).is_absolute() {
@@ -111,7 +114,11 @@ pub fn read_public_file(id: &str, rel: &str) -> Option<Vec<u8>> {
     let public = Path::new(&dir).join(names::DATA_PUBLIC);
     let target = public.join(rel);
     // Never hand back the evaluator.
-    if target.file_name().map(|n| n == names::EVALUATE_PY).unwrap_or(false) {
+    if target
+        .file_name()
+        .map(|n| n == names::EVALUATE_PY)
+        .unwrap_or(false)
+    {
         return None;
     }
     // Confirm the resolved path stays inside the public dir.
