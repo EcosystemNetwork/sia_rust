@@ -44,6 +44,19 @@
 //! Every verifier is **panic-free** on malformed input. When a submission cannot
 //! be interpreted, the verifier returns a *failing* outcome (`passed = false`,
 //! `score = 0.0`) with a human-readable `details` string rather than erroring.
+//!
+//! # Capability conservation (anti-Goodhart regression guard)
+//!
+//! Beyond per-item scoring, this module provides a *cross-generation* guard:
+//! [`CapabilitySnapshot`] + [`check_conservation`]. Adapted from the SIA²
+//! spectral architecture's "no capability lost during improvement" conservation
+//! law (see `docs/FORK_SWEEP.md`), it answers a question a single accuracy number
+//! cannot: *did this generation get better overall by silently breaking things it
+//! used to get right?* That regression-while-mean-rises pattern is the canonical
+//! Goodhart failure mode for self-improving loops, and the guard flags it
+//! directly.
+
+use std::collections::BTreeMap;
 
 /// Outcome of verifying a single submission against a reference.
 ///
@@ -491,6 +504,187 @@ pub fn is_stable<V: Verifier>(v: &V, submission: &str, reference: &str) -> bool 
 }
 
 // --------------------------------------------------------------------------- //
+// Capability conservation (anti-Goodhart regression guard)
+// --------------------------------------------------------------------------- //
+
+/// A per-item capability snapshot for a single generation.
+///
+/// Maps a stable item identifier (a question id, sub-task name, domain, …) to
+/// that item's score in `[0, 1]` — the same scale as [`VerifierOutcome::score`].
+/// A snapshot captures *what the agent could do* at one generation, so two
+/// snapshots from consecutive generations can be compared to detect silent
+/// capability loss. Items are held in a [`BTreeMap`] so all derived output is
+/// deterministically ordered (reproducibility; see `docs/REPRODUCIBILITY.md`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CapabilitySnapshot {
+    scores: BTreeMap<String, f64>,
+}
+
+impl CapabilitySnapshot {
+    /// An empty snapshot.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record (or overwrite) an item's score, clamped to `[0, 1]`. A non-finite
+    /// score is treated as `0.0` (panic-free, consistent with the verifiers).
+    pub fn record(&mut self, item: impl Into<String>, score: f64) {
+        let s = if score.is_finite() {
+            score.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.scores.insert(item.into(), s);
+    }
+
+    /// Build a snapshot from `(item, score)` pairs.
+    pub fn from_scores<I, S>(pairs: I) -> Self
+    where
+        I: IntoIterator<Item = (S, f64)>,
+        S: Into<String>,
+    {
+        let mut snap = Self::new();
+        for (item, score) in pairs {
+            snap.record(item, score);
+        }
+        snap
+    }
+
+    /// Number of recorded items.
+    pub fn len(&self) -> usize {
+        self.scores.len()
+    }
+
+    /// Whether the snapshot has no items.
+    pub fn is_empty(&self) -> bool {
+        self.scores.is_empty()
+    }
+
+    /// Mean score across all recorded items (`0.0` for an empty snapshot). This
+    /// is the snapshot's analogue of the dataset-level `accuracy`.
+    pub fn mean_score(&self) -> f64 {
+        if self.scores.is_empty() {
+            return 0.0;
+        }
+        self.scores.values().sum::<f64>() / self.scores.len() as f64
+    }
+
+    /// The score recorded for `item`, if present.
+    pub fn get(&self, item: &str) -> Option<f64> {
+        self.scores.get(item).copied()
+    }
+}
+
+/// A single item whose score changed between two snapshots.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CapabilityChange {
+    /// The item identifier.
+    pub item: String,
+    /// Score in the earlier (previous) snapshot.
+    pub before: f64,
+    /// Score in the later (current) snapshot.
+    pub after: f64,
+}
+
+impl CapabilityChange {
+    /// Signed score change (`after - before`).
+    pub fn delta(&self) -> f64 {
+        self.after - self.before
+    }
+}
+
+/// Report from a capability-conservation check between two generations.
+///
+/// The *conservation law* (adapted from the SIA² spectral architecture's "no
+/// capability lost during improvement"): an improvement step must not make the
+/// agent worse on items it previously handled. `conserved` is the law's verdict;
+/// crucially it can be `false` even when [`Self::net_delta`] is **positive** —
+/// that mean-rises-while-a-subset-regresses case is precisely the Goodhart
+/// failure mode the guard exists to surface.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConservationReport {
+    /// True iff no item shared by both snapshots regressed by more than `tolerance`.
+    pub conserved: bool,
+    /// Shared items that got worse by more than `tolerance` (sorted by item).
+    pub regressions: Vec<CapabilityChange>,
+    /// Shared items that got better by more than `tolerance` (sorted by item).
+    pub improvements: Vec<CapabilityChange>,
+    /// Items in `previous` but absent from `current` — dropped coverage. Reported
+    /// separately (not counted as a regression) since a missing item may simply
+    /// not have been re-evaluated; the caller decides how strict to be.
+    pub dropped: Vec<String>,
+    /// Mean score of the previous snapshot.
+    pub previous_mean: f64,
+    /// Mean score of the current snapshot.
+    pub current_mean: f64,
+    /// Absolute tolerance actually applied (clamped to `>= 0`).
+    pub tolerance: f64,
+}
+
+impl ConservationReport {
+    /// Net mean-score change (`current_mean - previous_mean`). A positive value
+    /// with `conserved == false` is the Goodhart case worth flagging.
+    pub fn net_delta(&self) -> f64 {
+        self.current_mean - self.previous_mean
+    }
+}
+
+/// Check the capability-conservation law between two generation snapshots.
+///
+/// For every item present in **both** snapshots: a score drop greater than
+/// `tolerance` is a regression; a rise greater than `tolerance` is an
+/// improvement; a change within `±tolerance` is held. Items only in `current`
+/// are new coverage (not a regression); items only in `previous` are reported as
+/// `dropped`. `tolerance` is clamped to `>= 0` (non-finite → `0.0`). Panic-free
+/// and deterministic — output vectors follow the snapshots' sorted item order.
+pub fn check_conservation(
+    previous: &CapabilitySnapshot,
+    current: &CapabilitySnapshot,
+    tolerance: f64,
+) -> ConservationReport {
+    let tol = if tolerance.is_finite() && tolerance >= 0.0 {
+        tolerance
+    } else {
+        0.0
+    };
+    let mut regressions = Vec::new();
+    let mut improvements = Vec::new();
+    let mut dropped = Vec::new();
+
+    for (item, &before) in &previous.scores {
+        match current.get(item) {
+            Some(after) => {
+                let delta = after - before;
+                if delta < -tol {
+                    regressions.push(CapabilityChange {
+                        item: item.clone(),
+                        before,
+                        after,
+                    });
+                } else if delta > tol {
+                    improvements.push(CapabilityChange {
+                        item: item.clone(),
+                        before,
+                        after,
+                    });
+                }
+            }
+            None => dropped.push(item.clone()),
+        }
+    }
+
+    ConservationReport {
+        conserved: regressions.is_empty(),
+        regressions,
+        improvements,
+        dropped,
+        previous_mean: previous.mean_score(),
+        current_mean: current.mean_score(),
+        tolerance: tol,
+    }
+}
+
+// --------------------------------------------------------------------------- //
 // Tests — offline, default build.
 // --------------------------------------------------------------------------- //
 #[cfg(test)]
@@ -718,6 +912,111 @@ mod tests {
             assert_eq!(out.score, baseline.score);
         }
         assert!(baseline.passed);
+    }
+
+    // ----- Capability conservation (anti-Goodhart regression guard) -----
+
+    #[test]
+    fn conservation_holds_when_nothing_regresses() {
+        // gen N -> N+1: two items improve, one holds. Nothing gets worse.
+        let prev = CapabilitySnapshot::from_scores([("q1", 1.0), ("q2", 0.0), ("q3", 0.0)]);
+        let curr = CapabilitySnapshot::from_scores([("q1", 1.0), ("q2", 1.0), ("q3", 0.0)]);
+        let report = check_conservation(&prev, &curr, 0.0);
+        assert!(report.conserved, "no item regressed");
+        assert!(report.regressions.is_empty());
+        assert_eq!(report.improvements.len(), 1);
+        assert_eq!(report.improvements[0].item, "q2");
+        assert!(report.net_delta() > 0.0);
+    }
+
+    #[test]
+    fn conservation_flags_goodhart_regression_when_mean_rises() {
+        // THE headline case: overall accuracy goes UP (0.5 -> 0.75) while the
+        // agent silently breaks q2, which it used to get right. A single accuracy
+        // number would call this a win; the conservation law catches the loss.
+        let prev =
+            CapabilitySnapshot::from_scores([("q1", 1.0), ("q2", 1.0), ("q3", 0.0), ("q4", 0.0)]);
+        let curr =
+            CapabilitySnapshot::from_scores([("q1", 1.0), ("q2", 0.0), ("q3", 1.0), ("q4", 1.0)]);
+
+        assert_eq!(prev.mean_score(), 0.5);
+        assert_eq!(curr.mean_score(), 0.75);
+
+        let report = check_conservation(&prev, &curr, 0.0);
+        assert!(
+            report.net_delta() > 0.0,
+            "mean score rose: {}",
+            report.net_delta()
+        );
+        assert!(
+            !report.conserved,
+            "must flag the silent regression despite the higher mean"
+        );
+        assert_eq!(report.regressions.len(), 1);
+        assert_eq!(report.regressions[0].item, "q2");
+        assert_eq!(report.regressions[0].delta(), -1.0);
+    }
+
+    #[test]
+    fn conservation_respects_tolerance_for_partial_credit() {
+        // A small partial-credit dip within tolerance is held; a larger one isn't.
+        let prev = CapabilitySnapshot::from_scores([("q1", 0.90), ("q2", 0.90)]);
+        let curr = CapabilitySnapshot::from_scores([("q1", 0.85), ("q2", 0.50)]);
+
+        // tol 0.1: q1 dropped 0.05 (held), q2 dropped 0.40 (regression).
+        let report = check_conservation(&prev, &curr, 0.1);
+        assert!(!report.conserved);
+        assert_eq!(report.regressions.len(), 1);
+        assert_eq!(report.regressions[0].item, "q2");
+
+        // tol 0.5: both dips are within tolerance -> conserved.
+        let lenient = check_conservation(&prev, &curr, 0.5);
+        assert!(lenient.conserved);
+        assert!(lenient.regressions.is_empty());
+    }
+
+    #[test]
+    fn conservation_reports_dropped_coverage_separately() {
+        // q3 disappears in the current generation: surfaced as `dropped`, not a
+        // regression (it may simply not have been re-evaluated).
+        let prev = CapabilitySnapshot::from_scores([("q1", 1.0), ("q3", 1.0)]);
+        let curr = CapabilitySnapshot::from_scores([("q1", 1.0), ("q2", 1.0)]);
+        let report = check_conservation(&prev, &curr, 0.0);
+        assert!(report.conserved, "no shared item regressed");
+        assert_eq!(report.dropped, vec!["q3".to_string()]);
+        // q2 is brand-new coverage: not an improvement of a shared item.
+        assert!(report.improvements.is_empty());
+    }
+
+    #[test]
+    fn conservation_output_is_deterministically_ordered() {
+        // Insertion order is scrambled; regressions must come out sorted by item.
+        let prev = CapabilitySnapshot::from_scores([("qC", 1.0), ("qA", 1.0), ("qB", 1.0)]);
+        let curr = CapabilitySnapshot::from_scores([("qC", 0.0), ("qA", 0.0), ("qB", 0.0)]);
+        let report = check_conservation(&prev, &curr, 0.0);
+        let items: Vec<&str> = report.regressions.iter().map(|c| c.item.as_str()).collect();
+        assert_eq!(items, vec!["qA", "qB", "qC"]);
+    }
+
+    #[test]
+    fn conservation_malformed_no_panic() {
+        // Empty snapshots, non-finite scores, and out-of-range scores must not
+        // panic and must be clamped/normalized.
+        let empty = CapabilitySnapshot::new();
+        assert_eq!(empty.mean_score(), 0.0);
+        let report = check_conservation(&empty, &empty, f64::NAN);
+        assert!(report.conserved);
+        assert_eq!(report.tolerance, 0.0); // NaN tolerance -> 0.0
+        assert_eq!(report.net_delta(), 0.0);
+
+        // Scores are clamped into [0, 1]; non-finite -> 0.0.
+        let mut snap = CapabilitySnapshot::new();
+        snap.record("a", 2.5);
+        snap.record("b", -1.0);
+        snap.record("c", f64::INFINITY);
+        assert_eq!(snap.get("a"), Some(1.0));
+        assert_eq!(snap.get("b"), Some(0.0));
+        assert_eq!(snap.get("c"), Some(0.0));
     }
 
     #[test]
