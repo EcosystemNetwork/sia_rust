@@ -1,7 +1,0 @@
-# Runtime dependencies for the Vercel deploy of the SIA Runs Visualizer
-# (asgi.py -> sia.web.server.create_app). The web path only needs FastAPI +
-# Pydantic; the heavier scientific deps in pyproject.toml (numpy/pandas/
-# scikit-learn) are not imported when serving the dashboard, so they are kept
-# out of the serverless function to stay under Vercel's size limit.
-fastapi>=0.110
-pydantic>=2.0
