@@ -522,7 +522,7 @@ def get_run_telemetry(runs_root: Path, run_name: str) -> dict[str, Any] | None:
         if not isinstance(data, dict):
             continue
         # Prefer the per-gen `cumulative` block; fall back to the whole object.
-        summary = data["cumulative"] if "cumulative" in data else data
+        summary = data.get("cumulative", data)
         _accumulate_telemetry(cumulative, summary)
         if isinstance(summary, dict):
             row = dict(summary)
@@ -581,8 +581,12 @@ def get_run_metrics_summary(runs_root: Path, run_name: str) -> dict[str, Any] | 
 _SCHEDULER_DECISION_FILENAME = "scheduler_decision.json"
 _WEIGHT_UPDATE_FILENAME = "weight_update.json"
 _SCHEDULER_ROW_KEYS = (
-    "decision", "recommended_next", "harness_efficiency",
-    "weight_efficiency", "harness_plateaued", "rationale",
+    "decision",
+    "recommended_next",
+    "harness_efficiency",
+    "weight_efficiency",
+    "harness_plateaued",
+    "rationale",
 )
 
 

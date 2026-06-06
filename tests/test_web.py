@@ -68,11 +68,23 @@ def runs_root(tmp_path: Path) -> Path:
         json.dumps(
             {
                 "generations": [
-                    {"generation": 1, "input_tokens": 100, "output_tokens": 40,
-                     "num_api_calls": 3, "num_tool_calls": 5, "duration_ms": 1200}
+                    {
+                        "generation": 1,
+                        "input_tokens": 100,
+                        "output_tokens": 40,
+                        "num_api_calls": 3,
+                        "num_tool_calls": 5,
+                        "duration_ms": 1200,
+                    }
                 ],
-                "cumulative": {"generation": 1, "input_tokens": 100, "output_tokens": 40,
-                               "num_api_calls": 3, "num_tool_calls": 5, "duration_ms": 1200},
+                "cumulative": {
+                    "generation": 1,
+                    "input_tokens": 100,
+                    "output_tokens": 40,
+                    "num_api_calls": 3,
+                    "num_tool_calls": 5,
+                    "duration_ms": 1200,
+                },
             }
         ),
         encoding="utf-8",
@@ -81,11 +93,23 @@ def runs_root(tmp_path: Path) -> Path:
         json.dumps(
             {
                 "generations": [
-                    {"generation": 2, "input_tokens": 200, "output_tokens": 60,
-                     "num_api_calls": 4, "num_tool_calls": 7, "duration_ms": 1800}
+                    {
+                        "generation": 2,
+                        "input_tokens": 200,
+                        "output_tokens": 60,
+                        "num_api_calls": 4,
+                        "num_tool_calls": 7,
+                        "duration_ms": 1800,
+                    }
                 ],
-                "cumulative": {"generation": 2, "input_tokens": 200, "output_tokens": 60,
-                               "num_api_calls": 4, "num_tool_calls": 7, "duration_ms": 1800},
+                "cumulative": {
+                    "generation": 2,
+                    "input_tokens": 200,
+                    "output_tokens": 60,
+                    "num_api_calls": 4,
+                    "num_tool_calls": 7,
+                    "duration_ms": 1800,
+                },
             }
         ),
         encoding="utf-8",
@@ -95,9 +119,13 @@ def runs_root(tmp_path: Path) -> Path:
     (gen2 / "scheduler_decision.json").write_text(
         json.dumps(
             {
-                "generation": 2, "decision": "weight", "recommended_next": "harness",
-                "harness_efficiency": 0.01, "weight_efficiency": 0.05,
-                "harness_plateaued": True, "rationale": "harness plateaued; try weights",
+                "generation": 2,
+                "decision": "weight",
+                "recommended_next": "harness",
+                "harness_efficiency": 0.01,
+                "weight_efficiency": 0.05,
+                "harness_plateaued": True,
+                "rationale": "harness plateaued; try weights",
             }
         ),
         encoding="utf-8",
@@ -105,8 +133,14 @@ def runs_root(tmp_path: Path) -> Path:
     (gen2 / "weight_update.json").write_text(
         json.dumps(
             {
-                "generation": 2, "kind": "lora", "updater": "demo", "num_examples": 12,
-                "loss_before": 0.9, "loss_after": 0.6, "updated": True, "details": "ok",
+                "generation": 2,
+                "kind": "lora",
+                "updater": "demo",
+                "num_examples": 12,
+                "loss_before": 0.9,
+                "loss_after": 0.6,
+                "updated": True,
+                "details": "ok",
             }
         ),
         encoding="utf-8",
