@@ -1,11 +1,11 @@
-//! Axum HTTP surface for the Arena.
+//! Axum HTTP surface for the Superradiant.
 //!
 //! Two audiences share one router:
-//! - **Agent-facing** (`/api/arena/register|heartbeat|result`, benchmark spec/
+//! - **Agent-facing** (`/api/superradiant/register|heartbeat|result`, benchmark spec/
 //!   files): the waiting-room protocol an external worker speaks. Each agent
 //!   authenticates with the bearer token issued at registration.
-//! - **Admin-facing** (`/api/arena/state|stream|selection|go|reset|kick`): the
-//!   control panel. Protected by `X-Admin-Token` when `SIA_ARENA_ADMIN_TOKEN`
+//! - **Admin-facing** (`/api/superradiant/state|stream|selection|go|reset|kick`): the
+//!   control panel. Protected by `X-Admin-Token` when `SUPERRADIANT_ADMIN_TOKEN`
 //!   is configured.
 
 use std::sync::Arc;
@@ -21,43 +21,48 @@ use serde_json::{json, Value};
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 
-use crate::arena::state::{ArenaError, ArenaHandle, ArenaRunConfig, AssignmentOutcome};
-use crate::arena::{benchmarks, eval};
+use crate::superradiant::state::{
+    AssignmentOutcome, SuperradiantError, SuperradiantHandle, SuperradiantRunConfig,
+};
+use crate::superradiant::{benchmarks, eval};
 
 /// Shared router state.
-pub type ArenaState = Arc<ArenaHandle>;
+pub type SuperradiantState = Arc<SuperradiantHandle>;
 
-/// Build the Arena router with its handle baked in. The returned router carries
+/// Build the Superradiant router with its handle baked in. The returned router carries
 /// unit state so it can be merged into the runs visualizer router.
-pub fn router(handle: ArenaState) -> Router {
+pub fn router(handle: SuperradiantState) -> Router {
     Router::new()
         // Admin / dashboard
-        .route("/arena", get(arena_page))
-        .route("/api/arena/state", get(api_state))
-        .route("/api/arena/stream", get(api_stream))
-        .route("/api/arena/selection", post(api_selection))
-        .route("/api/arena/go", post(api_go))
-        .route("/api/arena/reset", post(api_reset))
-        .route("/api/arena/kick", post(api_kick))
+        .route("/superradiant", get(superradiant_page))
+        .route("/api/superradiant/state", get(api_state))
+        .route("/api/superradiant/stream", get(api_stream))
+        .route("/api/superradiant/selection", post(api_selection))
+        .route("/api/superradiant/go", post(api_go))
+        .route("/api/superradiant/reset", post(api_reset))
+        .route("/api/superradiant/kick", post(api_kick))
         // Agent-facing
-        .route("/api/arena/register", post(api_register))
-        .route("/api/arena/heartbeat", post(api_heartbeat))
-        .route("/api/arena/result", post(api_result))
-        .route("/api/arena/benchmarks", get(api_benchmarks))
-        .route("/api/arena/benchmarks/:id/spec", get(api_bench_spec))
-        .route("/api/arena/benchmarks/:id/files/*path", get(api_bench_file))
+        .route("/api/superradiant/register", post(api_register))
+        .route("/api/superradiant/heartbeat", post(api_heartbeat))
+        .route("/api/superradiant/result", post(api_result))
+        .route("/api/superradiant/benchmarks", get(api_benchmarks))
+        .route("/api/superradiant/benchmarks/:id/spec", get(api_bench_spec))
+        .route(
+            "/api/superradiant/benchmarks/:id/files/*path",
+            get(api_bench_file),
+        )
         .with_state(handle)
 }
 
 // ---- error mapping -------------------------------------------------------- //
 
-fn err_response(e: ArenaError) -> Response {
+fn err_response(e: SuperradiantError) -> Response {
     let (status, msg) = match e {
-        ArenaError::UnknownAgent => (StatusCode::NOT_FOUND, "unknown agent"),
-        ArenaError::BadToken => (StatusCode::UNAUTHORIZED, "bad agent token"),
-        ArenaError::UnknownAssignment => (StatusCode::NOT_FOUND, "unknown assignment"),
-        ArenaError::UnknownBenchmark => (StatusCode::BAD_REQUEST, "unknown benchmark"),
-        ArenaError::Forbidden => (StatusCode::FORBIDDEN, "admin token required"),
+        SuperradiantError::UnknownAgent => (StatusCode::NOT_FOUND, "unknown agent"),
+        SuperradiantError::BadToken => (StatusCode::UNAUTHORIZED, "bad agent token"),
+        SuperradiantError::UnknownAssignment => (StatusCode::NOT_FOUND, "unknown assignment"),
+        SuperradiantError::UnknownBenchmark => (StatusCode::BAD_REQUEST, "unknown benchmark"),
+        SuperradiantError::Forbidden => (StatusCode::FORBIDDEN, "admin token required"),
     };
     (status, Json(json!({ "detail": msg }))).into_response()
 }
@@ -84,21 +89,21 @@ pub struct TokenQuery {
 
 // ---- admin / dashboard ---------------------------------------------------- //
 
-async fn arena_page() -> Response {
+async fn superradiant_page() -> Response {
     (
         [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        arena_index_html(),
+        superradiant_index_html(),
     )
         .into_response()
 }
 
-/// The Arena dashboard HTML (bundled at build time).
-pub fn arena_index_html() -> &'static [u8] {
-    crate::assets::web_static_bytes("arena.html").unwrap_or(b"arena.html not bundled")
+/// The Superradiant dashboard HTML (bundled at build time).
+pub fn superradiant_index_html() -> &'static [u8] {
+    crate::assets::web_static_bytes("superradiant.html").unwrap_or(b"superradiant.html not bundled")
 }
 
 async fn api_state(
-    State(h): State<ArenaState>,
+    State(h): State<SuperradiantState>,
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
 ) -> Response {
@@ -109,7 +114,7 @@ async fn api_state(
 }
 
 async fn api_stream(
-    State(h): State<ArenaState>,
+    State(h): State<SuperradiantState>,
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
 ) -> Response {
@@ -119,14 +124,18 @@ async fn api_stream(
     let initial = h.snapshot().to_string();
     let rx = h.subscribe();
     let live = BroadcastStream::new(rx).filter_map(|msg| match msg {
-        Ok(s) => Some(Ok::<Event, std::convert::Infallible>(Event::default().data(s))),
+        Ok(s) => Some(Ok::<Event, std::convert::Infallible>(
+            Event::default().data(s),
+        )),
         Err(_) => None, // lagged receiver: drop the gap, next snapshot is full state
     });
     let stream = tokio_stream::once(Ok::<Event, std::convert::Infallible>(
         Event::default().data(initial),
     ))
     .chain(live);
-    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,11 +143,11 @@ struct SelectionBody {
     #[serde(default)]
     benchmark_ids: Vec<String>,
     #[serde(default)]
-    config: Option<ArenaRunConfig>,
+    config: Option<SuperradiantRunConfig>,
 }
 
 async fn api_selection(
-    State(h): State<ArenaState>,
+    State(h): State<SuperradiantState>,
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
     Json(body): Json<SelectionBody>,
@@ -161,7 +170,7 @@ struct GoBody {
 }
 
 async fn api_go(
-    State(h): State<ArenaState>,
+    State(h): State<SuperradiantState>,
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
     Json(body): Json<GoBody>,
@@ -176,7 +185,7 @@ async fn api_go(
 }
 
 async fn api_reset(
-    State(h): State<ArenaState>,
+    State(h): State<SuperradiantState>,
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
 ) -> Response {
@@ -193,7 +202,7 @@ struct KickBody {
 }
 
 async fn api_kick(
-    State(h): State<ArenaState>,
+    State(h): State<SuperradiantState>,
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
     Json(body): Json<KickBody>,
@@ -217,8 +226,15 @@ struct RegisterBody {
     meta: Value,
 }
 
-async fn api_register(State(h): State<ArenaState>, Json(body): Json<RegisterBody>) -> Response {
-    let meta = if body.meta.is_null() { json!({}) } else { body.meta };
+async fn api_register(
+    State(h): State<SuperradiantState>,
+    Json(body): Json<RegisterBody>,
+) -> Response {
+    let meta = if body.meta.is_null() {
+        json!({})
+    } else {
+        body.meta
+    };
     let (id, token) = h.register(&body.name, &body.kind, meta);
     (
         StatusCode::CREATED,
@@ -235,7 +251,7 @@ struct HeartbeatBody {
 }
 
 async fn api_heartbeat(
-    State(h): State<ArenaState>,
+    State(h): State<SuperradiantState>,
     headers: HeaderMap,
     Json(body): Json<HeartbeatBody>,
 ) -> Response {
@@ -264,7 +280,7 @@ struct ResultBody {
 }
 
 async fn api_result(
-    State(h): State<ArenaState>,
+    State(h): State<SuperradiantState>,
     headers: HeaderMap,
     Json(body): Json<ResultBody>,
 ) -> Response {
@@ -322,7 +338,7 @@ async fn api_result(
     Json(resp).into_response()
 }
 
-async fn api_benchmarks(State(h): State<ArenaState>) -> Response {
+async fn api_benchmarks(State(h): State<SuperradiantState>) -> Response {
     // Re-discover so newly added task dirs appear without a restart.
     let snap = h.snapshot();
     Json(snap.get("benchmarks").cloned().unwrap_or(json!([]))).into_response()
@@ -330,7 +346,11 @@ async fn api_benchmarks(State(h): State<ArenaState>) -> Response {
 
 async fn api_bench_spec(Path(id): Path<String>) -> Response {
     let Some(task_md) = benchmarks::task_md(&id) else {
-        return (StatusCode::NOT_FOUND, Json(json!({"detail": "unknown benchmark"}))).into_response();
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"detail": "unknown benchmark"})),
+        )
+            .into_response();
     };
     Json(json!({
         "id": id,
@@ -348,7 +368,11 @@ async fn api_bench_file(Path((id, path)): Path<(String, String)>) -> Response {
                 .to_string();
             ([(header::CONTENT_TYPE, ctype)], bytes).into_response()
         }
-        None => (StatusCode::NOT_FOUND, Json(json!({"detail": "file not found"}))).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"detail": "file not found"})),
+        )
+            .into_response(),
     }
 }
 
@@ -360,11 +384,16 @@ mod tests {
     use tower::ServiceExt;
 
     fn app() -> Router {
-        router(ArenaHandle::new(std::env::temp_dir(), Some("secret".into())))
+        router(SuperradiantHandle::new(
+            std::env::temp_dir(),
+            Some("secret".into()),
+        ))
     }
 
     async fn body_json(resp: Response) -> Value {
-        let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+            .await
+            .unwrap();
         serde_json::from_slice(&bytes).unwrap_or(Value::Null)
     }
 
@@ -374,7 +403,7 @@ mod tests {
         let resp = app
             .clone()
             .oneshot(
-                Request::post("/api/arena/register")
+                Request::post("/api/superradiant/register")
                     .header("content-type", "application/json")
                     .body(Body::from(r#"{"name":"hermes","kind":"hermes"}"#))
                     .unwrap(),
@@ -388,7 +417,7 @@ mod tests {
 
         let resp = app
             .oneshot(
-                Request::post("/api/arena/heartbeat")
+                Request::post("/api/superradiant/heartbeat")
                     .header("content-type", "application/json")
                     .header("x-agent-token", token)
                     .body(Body::from(format!(r#"{{"agent_id":"{id}"}}"#)))
@@ -405,7 +434,11 @@ mod tests {
     async fn admin_endpoints_require_token() {
         let app = app();
         let resp = app
-            .oneshot(Request::get("/api/arena/state").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::get("/api/superradiant/state")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
@@ -416,7 +449,7 @@ mod tests {
         let app = app();
         let resp = app
             .oneshot(
-                Request::get("/api/arena/state?token=secret")
+                Request::get("/api/superradiant/state?token=secret")
                     .body(Body::empty())
                     .unwrap(),
             )

@@ -9,7 +9,7 @@ use clap::{Arg, ArgAction, ArgGroup, Command};
 use crate::config::Config;
 use crate::layout::{names, BUNDLED_TASKS};
 
-const SUBCOMMANDS: &[&str] = &["run", "web", "arena"];
+const SUBCOMMANDS: &[&str] = &["run", "web", "superradiant", "arena"];
 
 fn add_run_args(cmd: Command, env_config: &Config) -> Command {
     cmd.arg(
@@ -122,7 +122,7 @@ fn add_web_args(cmd: Command) -> Command {
     )
 }
 
-fn add_arena_args(cmd: Command) -> Command {
+fn add_superradiant_args(cmd: Command) -> Command {
     cmd.arg(
         Arg::new("host")
             .long("host")
@@ -140,14 +140,12 @@ fn add_arena_args(cmd: Command) -> Command {
         Arg::new("runs_dir")
             .long("runs-dir")
             .default_value(names::RUNS_ROOT)
-            .help("Directory where Arena results are persisted (default: ./runs)."),
+            .help("Directory where Superradiant results are persisted (default: ./runs)."),
     )
-    .arg(
-        Arg::new("admin_token")
-            .long("admin-token")
-            .help("Protect admin/control endpoints with this token (else \
-                   $SIA_ARENA_ADMIN_TOKEN, else unprotected)."),
-    )
+    .arg(Arg::new("admin_token").long("admin-token").help(
+        "Protect admin/control endpoints with this token (else \
+                   $SUPERRADIANT_ADMIN_TOKEN, else unprotected).",
+    ))
     .arg(
         Arg::new("log_level")
             .long("log-level")
@@ -156,23 +154,24 @@ fn add_arena_args(cmd: Command) -> Command {
     )
 }
 
-/// Build the top-level `sia` parser with `run` / `web` / `arena` sub-commands.
+/// Build the top-level `sia` parser with `run` / `web` / `superradiant` sub-commands.
 pub fn build_parser(env_config: &Config) -> Command {
     let run = add_run_args(
         Command::new("run").about("Run the orchestrator (agent evolution)."),
         env_config,
     );
     let web = add_web_args(Command::new("web").about("Serve the runs visualizer over HTTP."));
-    let arena = add_arena_args(
-        Command::new("arena")
-            .about("Serve the agent Arena: waiting room + admin benchmark control panel."),
+    let superradiant = add_superradiant_args(
+        Command::new("superradiant")
+            .visible_alias("arena")
+            .about("Serve Superradiant: the agent waiting room + benchmark battle control panel."),
     );
     Command::new("sia")
         .about("SIA: Self-Improving AI framework")
-        .subcommand_value_name("{run,web,arena}")
+        .subcommand_value_name("{run,web,superradiant}")
         .subcommand(run)
         .subcommand(web)
-        .subcommand(arena)
+        .subcommand(superradiant)
 }
 
 /// Insert the default `run` sub-command unless the user asked for one (or for help),

@@ -25,12 +25,15 @@ pub fn create_app(runs_dir: impl Into<PathBuf>) -> Router {
     let runs_root = std::fs::canonicalize(&runs_dir).unwrap_or(runs_dir);
     let state: AppState = Arc::new(runs_root.clone());
 
-    // The Arena (waiting room + battle coordinator) shares this server. Its
-    // admin/control endpoints require `SIA_ARENA_ADMIN_TOKEN` when set.
-    let admin_token = std::env::var("SIA_ARENA_ADMIN_TOKEN")
+    // The Superradiant (waiting room + battle coordinator) shares this server. Its
+    // admin/control endpoints require `SUPERRADIANT_ADMIN_TOKEN` when set.
+    let admin_token = std::env::var("SUPERRADIANT_ADMIN_TOKEN")
         .ok()
         .filter(|s| !s.is_empty());
-    let arena = crate::arena::router(crate::arena::ArenaHandle::new(runs_root, admin_token));
+    let superradiant = crate::superradiant::router(crate::superradiant::SuperradiantHandle::new(
+        runs_root,
+        admin_token,
+    ));
 
     Router::new()
         .route("/api/runs", get(api_runs))
@@ -72,7 +75,7 @@ pub fn create_app(runs_dir: impl Into<PathBuf>) -> Router {
         )
         .route("/", get(index))
         .with_state(state)
-        .merge(arena)
+        .merge(superradiant)
 }
 
 async fn api_runs(State(root): State<AppState>) -> Json<Vec<runs_data::RunSummary>> {

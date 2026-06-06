@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>SIA Arena</title>
+<title>Superradiant</title>
 <style>
   :root {
     --bg: #0f1115; --panel: #171a21; --panel-2: #1d212b; --border: #272c38;
@@ -91,7 +91,7 @@
 <body>
   <div class="topbar">
     <span id="livedot" class="dot"></span>
-    <h1>SIA&nbsp;Arena</h1>
+    <h1>Superradiant</h1>
     <span class="muted" id="conn">connecting…</span>
     <span class="spacer"></span>
     <input id="token" type="password" placeholder="admin token (if set)" style="width:200px" />
@@ -150,8 +150,8 @@ const $ = (id) => document.getElementById(id);
 let STATE = null;
 let ES = null;
 
-function token() { return localStorage.getItem('sia_arena_admin_token') || ''; }
-function setToken(t) { localStorage.setItem('sia_arena_admin_token', t || ''); }
+function token() { return localStorage.getItem('superradiant_admin_token') || ''; }
+function setToken(t) { localStorage.setItem('superradiant_admin_token', t || ''); }
 
 function headers() {
   const h = { 'Content-Type': 'application/json' };
@@ -298,12 +298,12 @@ function escapeHtml(str) {
 
 // ---- actions ------------------------------------------------------------ //
 
-async function kick(id) { try { await post('/api/arena/kick', { agent_id: id }); } catch (e) {} }
+async function kick(id) { try { await post('/api/superradiant/kick', { agent_id: id }); } catch (e) {} }
 window.kick = kick;
 
 $('save-sel').onclick = async () => {
   try {
-    await post('/api/arena/selection', { benchmark_ids: selectedBenchmarks(), config: readConfig() });
+    await post('/api/superradiant/selection', { benchmark_ids: selectedBenchmarks(), config: readConfig() });
     toast('Selection saved.');
   } catch (e) {}
 };
@@ -313,13 +313,13 @@ $('go').onclick = async () => {
   if (!benches.length) { toast('Select at least one benchmark first.', true); return; }
   try {
     // Persist selection/config, then fan out across all ready agents.
-    await post('/api/arena/selection', { benchmark_ids: benches, config: readConfig() });
-    const r = await post('/api/arena/go', { agent_ids: [], benchmark_ids: benches });
+    await post('/api/superradiant/selection', { benchmark_ids: benches, config: readConfig() });
+    const r = await post('/api/superradiant/go', { agent_ids: [], benchmark_ids: benches });
     toast(`GO — battle ${r.battle.id} started on ${r.battle.agent_ids.length} agent(s).`);
   } catch (e) {}
 };
 
-$('reset').onclick = async () => { try { await post('/api/arena/reset', {}); toast('Arena reset.'); } catch (e) {} };
+$('reset').onclick = async () => { try { await post('/api/superradiant/reset', {}); toast('Superradiant reset.'); } catch (e) {} };
 
 $('save-token').onclick = () => { setToken($('token').value.trim()); connect(); toast('Token applied.'); };
 
@@ -327,7 +327,7 @@ $('save-token').onclick = () => { setToken($('token').value.trim()); connect(); 
 
 function connect() {
   if (ES) { ES.close(); ES = null; }
-  const url = '/api/arena/stream' + (token() ? ('?token=' + encodeURIComponent(token())) : '');
+  const url = '/api/superradiant/stream' + (token() ? ('?token=' + encodeURIComponent(token())) : '');
   ES = new EventSource(url);
   ES.onopen = () => { $('livedot').classList.add('live'); $('conn').textContent = 'live'; };
   ES.onmessage = (ev) => { try { render(JSON.parse(ev.data)); } catch (e) {} };

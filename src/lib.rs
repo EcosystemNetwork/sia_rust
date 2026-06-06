@@ -4,7 +4,6 @@
 
 pub mod agent_impls;
 pub mod agent_reference;
-pub mod arena;
 pub mod api_keys;
 pub mod assets;
 pub mod cli;
@@ -29,6 +28,7 @@ pub mod run;
 pub mod run_setup;
 pub mod sandbox;
 pub mod scheduler;
+pub mod superradiant;
 pub mod task_files;
 pub mod verifier;
 pub mod web;
