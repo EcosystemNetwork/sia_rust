@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn accuracy_parsed_from_percent_or_fraction() {
-        let dir = std::env::temp_dir().join("arena_acc_test");
+        let dir = std::env::temp_dir().join("superradiant_acc_test");
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("results.json");
         std::fs::write(&p, r#"{"accuracy_percent": 42.5}"#).unwrap();

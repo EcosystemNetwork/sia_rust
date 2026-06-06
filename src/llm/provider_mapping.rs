@@ -56,10 +56,18 @@ pub fn api_key_for(provider: &Provider) -> SiaResult<String> {
 /// per-`client_kind` default (see the module docs). Unknown kinds fall back to
 /// the OpenAI default, since the OpenAI-compatible transport is the catch-all.
 pub fn base_url_for(provider: &Provider) -> String {
-    if let Some(base) = &provider.base_url {
-        return base.clone();
+    base_url_for_kind(&provider.client_kind, provider.base_url.as_deref())
+}
+
+/// Resolve a base URL from a raw `client_kind` + optional explicit `base_url`,
+/// applying the same per-kind defaults as [`base_url_for`]. Used when the
+/// provider config comes from a user-entered credential rather than a
+/// [`Provider`] struct (see [`client_for_with_key`]).
+pub fn base_url_for_kind(client_kind: &str, base_url: Option<&str>) -> String {
+    if let Some(base) = base_url.filter(|b| !b.trim().is_empty()) {
+        return base.to_string();
     }
-    match provider.client_kind.as_str() {
+    match client_kind {
         "anthropic" => ANTHROPIC_DEFAULT_BASE_URL.to_string(),
         "google" => GOOGLE_DEFAULT_BASE_URL.to_string(),
         // "openai" and any other (OpenAI-compatible) kind.
@@ -92,8 +100,29 @@ fn validate_client_kind(provider: &Provider) -> SiaResult<()> {
 pub fn client_for(provider: &Provider) -> SiaResult<AgentClient> {
     validate_client_kind(provider)?;
     let api_key = api_key_for(provider)?;
-    let base_url = base_url_for(provider);
-    match provider.client_kind.as_str() {
+    client_for_with_key(&provider.client_kind, provider.base_url.as_deref(), api_key)
+}
+
+/// Build an [`AgentClient`] from a raw `client_kind` + optional `base_url` and an
+/// **explicit** API key (not sourced from the environment).
+///
+/// This is the entry point for user-supplied credentials persisted outside the
+/// process environment (e.g. the Superradiant Postgres credential store): the key
+/// is decrypted just-in-time and passed here, never written to an env var.
+/// Validation and base-URL defaulting match [`client_for`].
+pub fn client_for_with_key(
+    client_kind: &str,
+    base_url: Option<&str>,
+    api_key: String,
+) -> SiaResult<AgentClient> {
+    if !VALID_CLIENT_KINDS.contains(&client_kind) {
+        return Err(SiaError::new(format!(
+            "invalid client_kind '{client_kind}'. Expected one of: {}.",
+            VALID_CLIENT_KINDS.join(", ")
+        )));
+    }
+    let base_url = base_url_for_kind(client_kind, base_url);
+    match client_kind {
         "anthropic" => Ok(AgentClient::Anthropic(
             HttpMessagesTransport::with_base_url(api_key, base_url),
         )),

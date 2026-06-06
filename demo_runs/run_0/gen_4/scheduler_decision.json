@@ -1,0 +1,9 @@
+{
+  "generation": 4,
+  "decision": "weight",
+  "recommended_next": "weight",
+  "harness_efficiency": 0.011,
+  "weight_efficiency": 0.039,
+  "harness_plateaued": true,
+  "rationale": "Harness efficiency plateaued; weight updates lead."
+}

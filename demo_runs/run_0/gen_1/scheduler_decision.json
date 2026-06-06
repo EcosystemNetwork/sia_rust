@@ -1,0 +1,9 @@
+{
+  "generation": 1,
+  "decision": "harness",
+  "recommended_next": "harness",
+  "harness_efficiency": 0.052,
+  "weight_efficiency": 0.0,
+  "harness_plateaued": false,
+  "rationale": "Fresh run \u2014 cheap harness/prompt edits dominate early gains."
+}

@@ -116,3 +116,11 @@ provider 'nebius' requires the API key in environment variable 'NEBIUS_API_KEY',
 ```
 
 Fix it by exporting the variable or adding it to `.env`, then re-run.
+
+## UI-entered keys (Superradiant)
+
+Beyond env-var credentials, Superradiant can store **user-entered** provider keys
+in Postgres (encrypted at rest) so models can be compared head-to-head from the
+UI without exporting anything. This needs the `superradiant-db` build feature,
+`DATABASE_URL`, and `SUPERRADIANT_SECRET_KEY`. See
+[SUPERRADIANT_DEPLOY.md](SUPERRADIANT_DEPLOY.md).

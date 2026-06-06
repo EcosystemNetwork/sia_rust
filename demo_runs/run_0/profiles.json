@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "name": "meta-agent",
+    "model": "kimi-k2",
+    "agent_impl": "native",
+    "temperature": 0.7,
+    "role": "proposes harness edits + improvement plan"
+  },
+  "target": {
+    "name": "gpqa-solver",
+    "model": "claude-haiku-4-5",
+    "max_tokens": 4096,
+    "tools": [
+      "python",
+      "web_search"
+    ],
+    "role": "answers GPQA Diamond questions"
+  }
+}

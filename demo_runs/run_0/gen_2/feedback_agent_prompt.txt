@@ -1,0 +1,8 @@
+# Feedback-agent prompt (generation 2)
+
+Previous generation scored **33.3%**. Analyze its failures and propose ONE high-leverage change.
+
+Focus areas:
+- Misread units / order-of-magnitude slips (Physics, Astronomy).
+- Mechanism vs. product confusion (Chemistry).
+- Cite evidence before committing to an answer.

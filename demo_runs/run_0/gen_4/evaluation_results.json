@@ -1,0 +1,73 @@
+{
+  "accuracy": 0.75,
+  "accuracy_percent": 75.0,
+  "num_correct": 9,
+  "num_total": 12,
+  "correct": 9,
+  "incorrect": 3,
+  "total": 12,
+  "missing": 0,
+  "invalid": 0,
+  "details": [
+    {
+      "question_id": 1,
+      "domain": "Physics",
+      "is_correct": true
+    },
+    {
+      "question_id": 2,
+      "domain": "Physics",
+      "is_correct": true
+    },
+    {
+      "question_id": 3,
+      "domain": "Physics",
+      "is_correct": true
+    },
+    {
+      "question_id": 4,
+      "domain": "Chemistry",
+      "is_correct": true
+    },
+    {
+      "question_id": 5,
+      "domain": "Chemistry",
+      "is_correct": true
+    },
+    {
+      "question_id": 6,
+      "domain": "Chemistry",
+      "is_correct": false
+    },
+    {
+      "question_id": 7,
+      "domain": "Biology",
+      "is_correct": true
+    },
+    {
+      "question_id": 8,
+      "domain": "Biology",
+      "is_correct": true
+    },
+    {
+      "question_id": 9,
+      "domain": "Biology",
+      "is_correct": true
+    },
+    {
+      "question_id": 10,
+      "domain": "Astronomy",
+      "is_correct": true
+    },
+    {
+      "question_id": 11,
+      "domain": "Astronomy",
+      "is_correct": false
+    },
+    {
+      "question_id": 12,
+      "domain": "Genetics",
+      "is_correct": false
+    }
+  ]
+}

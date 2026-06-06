@@ -1,0 +1,8 @@
+{
+  "id": 1,
+  "source": "agent",
+  "action": "run",
+  "args": {
+    "command": "python target_agent.py --q 0"
+  }
+}

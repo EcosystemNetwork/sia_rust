@@ -32,7 +32,8 @@ pub type SuperradiantState = Arc<SuperradiantHandle>;
 /// Build the Superradiant router with its handle baked in. The returned router carries
 /// unit state so it can be merged into the runs visualizer router.
 pub fn router(handle: SuperradiantState) -> Router {
-    Router::new()
+    #[allow(unused_mut)]
+    let mut router = Router::new()
         // Admin / dashboard
         .route("/superradiant", get(superradiant_page))
         .route("/api/superradiant/state", get(api_state))
@@ -50,8 +51,24 @@ pub fn router(handle: SuperradiantState) -> Router {
         .route(
             "/api/superradiant/benchmarks/:id/files/*path",
             get(api_bench_file),
-        )
-        .with_state(handle)
+        );
+
+    // User-supplied provider credentials + house competitors (Postgres-backed).
+    #[cfg(feature = "superradiant-db")]
+    {
+        router = router
+            .route(
+                "/api/superradiant/providers",
+                get(api_providers_list).post(api_providers_create),
+            )
+            .route(
+                "/api/superradiant/providers/:id",
+                axum::routing::delete(api_providers_delete),
+            )
+            .route("/api/superradiant/house", post(api_house));
+    }
+
+    router.with_state(handle)
 }
 
 // ---- error mapping -------------------------------------------------------- //
@@ -179,7 +196,12 @@ async fn api_go(
         return err_response(e);
     }
     match h.go(body.agent_ids, body.benchmark_ids) {
-        Ok(battle) => (StatusCode::OK, Json(json!({ "battle": battle }))).into_response(),
+        Ok(battle) => {
+            // Kick off in-process drivers for any house competitors in this battle.
+            #[cfg(feature = "superradiant-db")]
+            h.spawn_house_drivers();
+            (StatusCode::OK, Json(json!({ "battle": battle }))).into_response()
+        }
         Err(e) => err_response(e),
     }
 }
@@ -374,6 +396,131 @@ async fn api_bench_file(Path((id, path)): Path<(String, String)>) -> Response {
         )
             .into_response(),
     }
+}
+
+// ---- provider credentials + house competitors (superradiant-db) ----------- //
+
+#[cfg(feature = "superradiant-db")]
+fn store_unavailable() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({"detail": "credential store not configured (set DATABASE_URL)"})),
+    )
+        .into_response()
+}
+
+#[cfg(feature = "superradiant-db")]
+fn internal_err(e: crate::error::SiaError) -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"detail": e.to_string()})),
+    )
+        .into_response()
+}
+
+#[cfg(feature = "superradiant-db")]
+async fn api_providers_list(
+    State(h): State<SuperradiantState>,
+    headers: HeaderMap,
+    Query(q): Query<TokenQuery>,
+) -> Response {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+        return err_response(e);
+    }
+    let Some(store) = h.credentials.as_ref() else {
+        return store_unavailable();
+    };
+    match store.list().await {
+        Ok(rows) => Json(rows).into_response(),
+        Err(e) => internal_err(e),
+    }
+}
+
+#[cfg(feature = "superradiant-db")]
+async fn api_providers_create(
+    State(h): State<SuperradiantState>,
+    headers: HeaderMap,
+    Query(q): Query<TokenQuery>,
+    Json(body): Json<crate::superradiant::credentials::NewCredential>,
+) -> Response {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+        return err_response(e);
+    }
+    let Some(store) = h.credentials.as_ref() else {
+        return store_unavailable();
+    };
+    match store.create(body).await {
+        Ok(row) => (StatusCode::CREATED, Json(row)).into_response(),
+        // Validation failures are the user's fault → 400, not 500.
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"detail": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(feature = "superradiant-db")]
+async fn api_providers_delete(
+    State(h): State<SuperradiantState>,
+    headers: HeaderMap,
+    Query(q): Query<TokenQuery>,
+    Path(id): Path<String>,
+) -> Response {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+        return err_response(e);
+    }
+    let Some(store) = h.credentials.as_ref() else {
+        return store_unavailable();
+    };
+    match store.delete(&id).await {
+        Ok(true) => (StatusCode::OK, Json(json!({"deleted": id}))).into_response(),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"detail": "credential not found"})),
+        )
+            .into_response(),
+        Err(e) => internal_err(e),
+    }
+}
+
+#[cfg(feature = "superradiant-db")]
+#[derive(Debug, Default, Deserialize)]
+struct HouseBody {
+    #[serde(default)]
+    credential_ids: Vec<String>,
+}
+
+/// Register the given stored credentials as house competitors in the waiting
+/// room (idempotent). They then join the next `go` like external workers.
+#[cfg(feature = "superradiant-db")]
+async fn api_house(
+    State(h): State<SuperradiantState>,
+    headers: HeaderMap,
+    Query(q): Query<TokenQuery>,
+    Json(body): Json<HouseBody>,
+) -> Response {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+        return err_response(e);
+    }
+    let Some(store) = h.credentials.as_ref() else {
+        return store_unavailable();
+    };
+    for id in &body.credential_ids {
+        match store.resolve(id).await {
+            Ok(c) => {
+                h.register_house(&c.id, &c.name, &c.model, &c.client_kind);
+            }
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"detail": e.to_string()})),
+                )
+                    .into_response()
+            }
+        }
+    }
+    Json(h.snapshot()).into_response()
 }
 
 #[cfg(test)]

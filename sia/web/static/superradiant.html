@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Superradiant</title>
+<script src="config.js"></script>
 <style>
   :root {
     --bg: #0f1115; --panel: #171a21; --panel-2: #1d212b; --border: #272c38;
@@ -94,17 +95,47 @@
     <h1>Superradiant</h1>
     <span class="muted" id="conn">connecting…</span>
     <span class="spacer"></span>
+    <input id="api-base" type="text" placeholder="backend URL (Vercel→Railway)" style="width:200px" title="Leave empty for same-origin. Set to the backend's public URL for a split deploy." />
+    <button id="save-api-base">Use URL</button>
     <input id="token" type="password" placeholder="admin token (if set)" style="width:200px" />
     <button id="save-token">Use token</button>
     <a href="/" class="badge">← SIA Studio</a>
   </div>
 
   <div class="grid">
-    <!-- Left: waiting room -->
+    <!-- Left: waiting room + provider credentials -->
     <div>
       <div class="panel">
         <h2>Waiting Room <span class="count" id="agent-count"></span></h2>
         <div id="agents"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Providers / API Keys <span class="count" id="prov-count"></span></h2>
+        <div class="muted" id="prov-status" style="margin-bottom:10px"></div>
+        <div class="config" style="flex-direction:column;gap:8px;align-items:stretch">
+          <input id="prov-name" type="text" placeholder="display name (e.g. Google Gemini)" />
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <select id="prov-kind" style="flex:1;min-width:120px">
+              <option value="google">Google (Gemini)</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="custom">Custom (OpenAI-compatible)</option>
+            </select>
+            <input id="prov-model" type="text" placeholder="model (e.g. gemini-2.5-pro)" style="flex:1;min-width:140px" />
+          </div>
+          <input id="prov-base" type="text" placeholder="base URL (required for Custom)" style="display:none" />
+          <input id="prov-key" type="password" placeholder="API key (stored encrypted)" />
+          <button id="prov-add" class="primary">+ Add provider</button>
+        </div>
+        <div id="providers" style="margin-top:12px"></div>
+        <div class="controls" style="margin-top:10px">
+          <button id="prov-enter">Enter selected as competitors</button>
+        </div>
+        <div class="muted" style="margin-top:8px;font-size:12px">
+          House competitors run the model in-process on MC benchmarks (gpqa, arithmetic-mc),
+          then join the next <b>GO</b>.
+        </div>
       </div>
     </div>
 
@@ -153,6 +184,15 @@ let ES = null;
 function token() { return localStorage.getItem('superradiant_admin_token') || ''; }
 function setToken(t) { localStorage.setItem('superradiant_admin_token', t || ''); }
 
+// Backend base URL: in-page field → localStorage → config.js → same-origin.
+function apiBase() {
+  const stored = localStorage.getItem('superradiant_api_base');
+  const base = (stored != null ? stored : (window.SUPERRADIANT_API_BASE || ''));
+  return base.replace(/\/+$/, '');
+}
+function setApiBase(b) { localStorage.setItem('superradiant_api_base', (b || '').replace(/\/+$/, '')); }
+function api(path) { return apiBase() + path; }
+
 function headers() {
   const h = { 'Content-Type': 'application/json' };
   if (token()) h['X-Admin-Token'] = token();
@@ -168,12 +208,17 @@ function toast(msg, isErr) {
   t._timer = setTimeout(() => { t.style.display = 'none'; }, 4000);
 }
 
-async function post(path, body) {
-  const res = await fetch(path, { method: 'POST', headers: headers(), body: JSON.stringify(body || {}) });
+async function req(path, method, body) {
+  const opts = { method, headers: headers() };
+  if (body !== undefined) opts.body = JSON.stringify(body || {});
+  const res = await fetch(api(path), opts);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { toast((data && data.detail) || ('HTTP ' + res.status), true); throw new Error('req failed'); }
   return data;
 }
+async function post(path, body) { return req(path, 'POST', body || {}); }
+async function getJSON(path) { return req(path, 'GET'); }
+async function del(path) { return req(path, 'DELETE'); }
 
 // ---- rendering ---------------------------------------------------------- //
 
@@ -323,13 +368,95 @@ $('reset').onclick = async () => { try { await post('/api/superradiant/reset', {
 
 $('save-token').onclick = () => { setToken($('token').value.trim()); connect(); toast('Token applied.'); };
 
+// ---- providers / API keys ----------------------------------------------- //
+
+let PROVIDERS = [];
+
+async function loadProviders() {
+  try {
+    PROVIDERS = await getJSON('/api/superradiant/providers');
+    $('prov-status').textContent = '';
+    renderProviders();
+  } catch (e) {
+    // 503 = no DB configured; show a hint rather than an error toast spam.
+    PROVIDERS = [];
+    $('prov-status').textContent = 'Credential store not configured (set DATABASE_URL on the backend).';
+    renderProviders();
+  }
+}
+
+function renderProviders() {
+  const el = $('providers');
+  $('prov-count').textContent = PROVIDERS.length ? `${PROVIDERS.length} saved` : '';
+  if (!PROVIDERS.length) { el.innerHTML = '<div class="empty">No providers saved yet.</div>'; return; }
+  el.innerHTML = PROVIDERS.map(p => `
+    <label class="bench-item">
+      <input type="checkbox" class="prov-cb" value="${p.id}" />
+      <span>
+        <span class="title">${escapeHtml(p.name)}</span>
+        <span class="id"> ${escapeHtml(p.client_kind)} · ${escapeHtml(p.model)}${p.base_url ? ' · ' + escapeHtml(p.base_url) : ''}</span>
+      </span>
+      <span class="spacer"></span>
+      <button class="danger" style="padding:3px 8px;font-size:11px" onclick="deleteProvider('${p.id}')">delete</button>
+    </label>`).join('');
+}
+
+$('prov-kind').onchange = () => {
+  $('prov-base').style.display = $('prov-kind').value === 'custom' ? 'block' : 'none';
+};
+
+$('prov-add').onclick = async () => {
+  const kindSel = $('prov-kind').value;
+  // "Custom" is just an OpenAI-compatible endpoint with a base URL.
+  const client_kind = kindSel === 'custom' ? 'openai' : kindSel;
+  const base_url = $('prov-base').value.trim();
+  const body = {
+    name: $('prov-name').value.trim(),
+    client_kind,
+    model: $('prov-model').value.trim(),
+    api_key: $('prov-key').value,
+    base_url: base_url || null,
+  };
+  if (!body.model) { toast('Enter a model id.', true); return; }
+  if (!body.api_key) { toast('Enter an API key.', true); return; }
+  if (kindSel === 'custom' && !base_url) { toast('Custom providers need a base URL.', true); return; }
+  try {
+    await post('/api/superradiant/providers', body);
+    $('prov-name').value = ''; $('prov-model').value = ''; $('prov-key').value = ''; $('prov-base').value = '';
+    toast('Provider saved.');
+    loadProviders();
+  } catch (e) {}
+};
+
+async function deleteProvider(id) {
+  try { await del('/api/superradiant/providers/' + encodeURIComponent(id)); toast('Provider deleted.'); loadProviders(); }
+  catch (e) {}
+}
+window.deleteProvider = deleteProvider;
+
+$('prov-enter').onclick = async () => {
+  const ids = Array.from(document.querySelectorAll('.prov-cb:checked')).map(c => c.value);
+  if (!ids.length) { toast('Select at least one provider.', true); return; }
+  try {
+    await post('/api/superradiant/house', { credential_ids: ids });
+    toast(`${ids.length} competitor(s) entered the waiting room.`);
+  } catch (e) {}
+};
+
+$('save-api-base').onclick = () => {
+  setApiBase($('api-base').value.trim());
+  connect();
+  loadProviders();
+  toast('Backend URL applied.');
+};
+
 // ---- live stream -------------------------------------------------------- //
 
 function connect() {
   if (ES) { ES.close(); ES = null; }
-  const url = '/api/superradiant/stream' + (token() ? ('?token=' + encodeURIComponent(token())) : '');
+  const url = api('/api/superradiant/stream') + (token() ? ('?token=' + encodeURIComponent(token())) : '');
   ES = new EventSource(url);
-  ES.onopen = () => { $('livedot').classList.add('live'); $('conn').textContent = 'live'; };
+  ES.onopen = () => { $('livedot').classList.add('live'); $('conn').textContent = 'live'; loadProviders(); };
   ES.onmessage = (ev) => { try { render(JSON.parse(ev.data)); } catch (e) {} };
   ES.onerror = () => {
     $('livedot').classList.remove('live');
@@ -338,6 +465,8 @@ function connect() {
 }
 
 $('token').value = token();
+$('api-base').value = apiBase();
+$('prov-kind').dispatchEvent(new Event('change'));
 connect();
 </script>
 </body>

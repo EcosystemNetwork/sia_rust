@@ -35,8 +35,25 @@ pub fn run_web(args: &ArgMatches) -> SiaResult<()> {
 /// the `/superradiant` dashboard are both available. This command simply makes
 /// Superradiant discoverable and lets an admin token be supplied on the CLI.
 pub fn run_superradiant(args: &ArgMatches) -> SiaResult<()> {
-    let host = opt_str(args, "host").unwrap_or("127.0.0.1");
-    let port = *args.get_one::<u16>("port").unwrap_or(&8000);
+    let host_arg = opt_str(args, "host").unwrap_or("127.0.0.1").to_string();
+    let port_arg = *args.get_one::<u16>("port").unwrap_or(&8000);
+    // Cloud platforms (Railway/Render/Fly) inject $PORT and expect a 0.0.0.0
+    // bind. When $PORT is present the env wins; locally the CLI flags do.
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.trim().parse::<u16>().ok())
+        .unwrap_or(port_arg);
+    let host = std::env::var("HOST")
+        .ok()
+        .filter(|h| !h.trim().is_empty())
+        .unwrap_or_else(|| {
+            if std::env::var("PORT").is_ok() {
+                "0.0.0.0".to_string()
+            } else {
+                host_arg
+            }
+        });
+    let host = host.as_str();
     let runs_dir = opt_str(args, "runs_dir").unwrap_or(names::RUNS_ROOT);
 
     // CLI flag wins over the environment; the server reads it from the env.

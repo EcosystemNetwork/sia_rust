@@ -19,23 +19,54 @@ use crate::web::runs as runs_data;
 
 type AppState = Arc<PathBuf>;
 
-/// Build the axum application serving the runs under `runs_dir`.
+/// Build the axum application serving the runs under `runs_dir` (no credential
+/// store — house competitors disabled).
 pub fn create_app(runs_dir: impl Into<PathBuf>) -> Router {
-    let runs_dir = runs_dir.into();
-    let runs_root = std::fs::canonicalize(&runs_dir).unwrap_or(runs_dir);
-    let state: AppState = Arc::new(runs_root.clone());
-
+    let runs_root = canonical_runs_root(runs_dir);
     // The Superradiant (waiting room + battle coordinator) shares this server. Its
     // admin/control endpoints require `SUPERRADIANT_ADMIN_TOKEN` when set.
-    let admin_token = std::env::var("SUPERRADIANT_ADMIN_TOKEN")
-        .ok()
-        .filter(|s| !s.is_empty());
     let superradiant = crate::superradiant::router(crate::superradiant::SuperradiantHandle::new(
-        runs_root,
-        admin_token,
+        runs_root.clone(),
+        admin_token_from_env(),
     ));
+    assemble(runs_root, superradiant)
+}
 
-    Router::new()
+/// Like [`create_app`] but with an optional Postgres credential store, enabling
+/// the credential UI + in-process house competitors (the Vercel/Railway path).
+#[cfg(feature = "superradiant-db")]
+pub fn create_app_with_store(
+    runs_dir: impl Into<PathBuf>,
+    store: Option<crate::superradiant::credentials::CredentialStore>,
+) -> Router {
+    let runs_root = canonical_runs_root(runs_dir);
+    let superradiant = crate::superradiant::router(
+        crate::superradiant::SuperradiantHandle::with_credentials(
+            runs_root.clone(),
+            admin_token_from_env(),
+            store,
+        ),
+    );
+    assemble(runs_root, superradiant)
+}
+
+fn canonical_runs_root(runs_dir: impl Into<PathBuf>) -> PathBuf {
+    let runs_dir = runs_dir.into();
+    std::fs::canonicalize(&runs_dir).unwrap_or(runs_dir)
+}
+
+fn admin_token_from_env() -> Option<String> {
+    std::env::var("SUPERRADIANT_ADMIN_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+/// Assemble the runs-visualizer routes, merge the Superradiant router, and apply
+/// CORS (when built with `superradiant-db`, for the Vercel/Railway split).
+fn assemble(runs_root: PathBuf, superradiant: Router) -> Router {
+    let state: AppState = Arc::new(runs_root);
+    #[allow(unused_mut)]
+    let mut app = Router::new()
         .route("/api/runs", get(api_runs))
         .route("/api/runs/:run_name", get(api_run))
         .route(
@@ -66,6 +97,10 @@ pub fn create_app(runs_dir: impl Into<PathBuf>) -> Router {
         .route("/api/runs/:run_name/metrics", get(api_run_metrics))
         .route("/api/runs/:run_name/scheduler", get(api_scheduler_timeline))
         .route(
+            "/api/runs/:run_name/conservation",
+            get(api_conservation_timeline),
+        )
+        .route(
             "/api/runs/:run_name/gens/:gen_name/scheduler",
             get(api_scheduler_decision),
         )
@@ -74,8 +109,65 @@ pub fn create_app(runs_dir: impl Into<PathBuf>) -> Router {
             get(api_weight_update),
         )
         .route("/", get(index))
+        .route("/config.js", get(config_js))
         .with_state(state)
-        .merge(superradiant)
+        .merge(superradiant);
+
+    #[cfg(feature = "superradiant-db")]
+    {
+        app = app.layer(cors_layer());
+    }
+    app
+}
+
+/// CORS for the static frontend (Vercel) → backend (Railway) split. Origins
+/// come from `SUPERRADIANT_CORS_ORIGIN` (comma-separated); unset = permissive
+/// (dev). `X-Admin-Token` is allowed so the dashboard can authenticate.
+#[cfg(feature = "superradiant-db")]
+fn cors_layer() -> tower_http::cors::CorsLayer {
+    use axum::http::{header, HeaderName, Method};
+    use tower_http::cors::{Any, CorsLayer};
+
+    let methods = [Method::GET, Method::POST, Method::DELETE, Method::OPTIONS];
+    let headers = [header::CONTENT_TYPE, HeaderName::from_static("x-admin-token")];
+
+    match std::env::var("SUPERRADIANT_CORS_ORIGIN") {
+        Ok(origins) if !origins.trim().is_empty() => {
+            let list: Vec<axum::http::HeaderValue> = origins
+                .split(',')
+                .filter_map(|o| o.trim().parse().ok())
+                .collect();
+            CorsLayer::new()
+                .allow_origin(list)
+                .allow_methods(methods)
+                .allow_headers(headers)
+        }
+        _ => CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(methods)
+            .allow_headers(headers),
+    }
+}
+
+/// Connect the Postgres credential store from `DATABASE_URL`, if set. Logs and
+/// returns `None` on any failure so the server still boots (external workers
+/// keep working; the credential UI is disabled).
+#[cfg(feature = "superradiant-db")]
+pub async fn connect_credential_store(
+) -> Option<crate::superradiant::credentials::CredentialStore> {
+    let url = std::env::var("DATABASE_URL")
+        .ok()
+        .filter(|u| !u.trim().is_empty())?;
+    match crate::superradiant::credentials::CredentialStore::connect(&url).await {
+        Ok(store) => {
+            println!("Superradiant credential store connected (Postgres).");
+            Some(store)
+        }
+        Err(e) => {
+            eprintln!("WARNING: credential store disabled — {e}");
+            None
+        }
+    }
 }
 
 async fn api_runs(State(root): State<AppState>) -> Json<Vec<runs_data::RunSummary>> {
@@ -175,6 +267,18 @@ async fn api_scheduler_timeline(
     }
 }
 
+// Run-level capability-conservation timeline (anti-Goodhart guard). File-backed:
+// aggregates each generation's conservation.json.
+async fn api_conservation_timeline(
+    State(root): State<AppState>,
+    Path(run_name): Path<String>,
+) -> Response {
+    match runs_data::get_conservation_timeline(&root, &run_name) {
+        Some(timeline) => Json(timeline).into_response(),
+        None => not_found(&format!("Run not found: {run_name}")),
+    }
+}
+
 async fn api_scheduler_decision(
     State(root): State<AppState>,
     Path((run_name, gen_name)): Path<(String, String)>,
@@ -204,6 +308,19 @@ async fn index() -> Response {
     }
 }
 
+/// Serve the Superradiant frontend config (backend base URL). Harmless 404 when
+/// not bundled; the page then defaults to same-origin.
+async fn config_js() -> Response {
+    match assets::web_static_bytes("config.js") {
+        Some(bytes) => (
+            [(header::CONTENT_TYPE, "application/javascript; charset=utf-8")],
+            bytes,
+        )
+            .into_response(),
+        None => not_found("config.js not found"),
+    }
+}
+
 fn not_found(detail: &str) -> Response {
     (
         StatusCode::NOT_FOUND,
@@ -214,7 +331,6 @@ fn not_found(detail: &str) -> Response {
 
 /// Run the server in the foreground (blocks). Used by `sia web`.
 pub fn serve(host: &str, port: u16, runs_dir: &str, _open_browser: bool) -> crate::SiaResult<()> {
-    let app = create_app(runs_dir);
     let addr = resolve_addr(host, port)?;
     let resolved = std::fs::canonicalize(runs_dir).unwrap_or_else(|_| PathBuf::from(runs_dir));
     println!(
@@ -222,9 +338,20 @@ pub fn serve(host: &str, port: u16, runs_dir: &str, _open_browser: bool) -> crat
         resolved.display(),
         addr
     );
+    let runs_dir = runs_dir.to_string();
 
     let rt = tokio::runtime::Runtime::new().map_err(|e| crate::SiaError::new(e.to_string()))?;
     rt.block_on(async move {
+        // Build the app inside the runtime so the credential store (async
+        // connect) can be wired in when `superradiant-db` is enabled.
+        #[cfg(feature = "superradiant-db")]
+        let app = {
+            let store = connect_credential_store().await;
+            create_app_with_store(&runs_dir, store)
+        };
+        #[cfg(not(feature = "superradiant-db"))]
+        let app = create_app(&runs_dir);
+
         let listener = tokio::net::TcpListener::bind(addr)
             .await
             .map_err(|e| crate::SiaError::new(format!("Could not bind {addr}: {e}")))?;

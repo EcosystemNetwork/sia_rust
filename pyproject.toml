@@ -49,6 +49,11 @@ sia = "sia.orchestrator:main"
 Homepage = "https://github.com/hexo-ai/sia"
 Repository = "https://github.com/hexo-ai/sia"
 
+[tool.vercel]
+# The FastAPI app is built by sia.web.server.create_app and exposed as a
+# module-level `app` in asgi.py at the repo root (see that file).
+entrypoint = "asgi.py"
+
 [tool.setuptools.packages.find]
 include = ["sia*"]
 

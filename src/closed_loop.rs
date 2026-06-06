@@ -40,6 +40,7 @@ use serde_json::{json, Value};
 
 use crate::layout::{names, RunLayout};
 use crate::scheduler::{AdaptiveScheduler, GenerationRecord, SchedulerConfig, UpdateKind};
+use crate::verifier::{check_conservation, CapabilitySnapshot};
 use crate::weights::{
     extract_training_examples, LoraReferenceUpdater, WeightUpdateConfig, WeightUpdateOutcome,
     WeightUpdater,
@@ -50,6 +51,16 @@ pub const SCHEDULER_DECISION_JSON: &str = "scheduler_decision.json";
 
 /// Filename for the per-generation weight-update artifact (#19 wiring).
 pub const WEIGHT_UPDATE_JSON: &str = "weight_update.json";
+
+/// Filename for the per-generation capability-conservation artifact
+/// (anti-Goodhart regression guard; see [`crate::verifier::check_conservation`]).
+pub const CONSERVATION_JSON: &str = "conservation.json";
+
+/// Default absolute tolerance for the per-generation conservation check. A
+/// per-item score may dip by up to this much (partial-credit float jitter)
+/// before it counts as a regression; the guard stays focused on genuine
+/// capability loss, not noise.
+pub const DEFAULT_CONSERVATION_TOLERANCE: f64 = 1e-9;
 
 /// Filename of the per-generation token/timing telemetry (mirrors
 /// [`crate::llm::telemetry::TELEMETRY_JSON`]; duplicated as a `&str` so this
@@ -423,6 +434,137 @@ fn load_trajectory(layout: &RunLayout, gen: i64) -> Option<Value> {
     None
 }
 
+// --------------------------------------------------------------------------- //
+// 3. Capability conservation per generation (anti-Goodhart regression guard)
+// --------------------------------------------------------------------------- //
+
+/// Build a [`CapabilitySnapshot`] from a generation's `results.json` `details[]`.
+///
+/// Mirrors the dashboard's `domain_stats` reader: each row in `details` is one
+/// graded item. The item key is the first present of `question_id` / `id` /
+/// `qid` / `index` (else the row's positional index); the per-item score is the
+/// first present of a float `score`, a float `accuracy` (rescaled if `> 1.0`),
+/// or a boolean `is_correct` / `correct` (→ `1.0` / `0.0`). Returns `None` when
+/// there is no `details` array to read. Panic-free.
+fn snapshot_from_results(gen_dir: &str) -> Option<CapabilitySnapshot> {
+    const EVAL_RESULT_NAMES: &[&str] = &["evaluation_results.json", names::RESULTS_JSON];
+    let as_fraction = |v: f64| if v > 1.0 { v / 100.0 } else { v };
+
+    for name in EVAL_RESULT_NAMES {
+        let path = Path::new(gen_dir).join(name);
+        let Some(data) = read_json(&path) else {
+            continue;
+        };
+        let Some(details) = data.get("details").and_then(|v| v.as_array()) else {
+            continue;
+        };
+        let mut snap = CapabilitySnapshot::new();
+        for (idx, row) in details.iter().enumerate() {
+            let Some(obj) = row.as_object() else { continue };
+            let key = ["question_id", "id", "qid", "index"]
+                .iter()
+                .find_map(|k| obj.get(*k).map(value_to_key))
+                .unwrap_or_else(|| idx.to_string());
+            let score = if let Some(s) = obj.get("score").and_then(Value::as_f64) {
+                as_fraction(s)
+            } else if let Some(a) = obj.get("accuracy").and_then(Value::as_f64) {
+                as_fraction(a)
+            } else if let Some(b) = obj
+                .get("is_correct")
+                .or_else(|| obj.get("correct"))
+                .and_then(Value::as_bool)
+            {
+                if b {
+                    1.0
+                } else {
+                    0.0
+                }
+            } else {
+                continue;
+            };
+            snap.record(key, score);
+        }
+        if !snap.is_empty() {
+            return Some(snap);
+        }
+    }
+    None
+}
+
+/// Render a JSON value as a stable item key (string/number verbatim, else its
+/// compact JSON form).
+fn value_to_key(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// Compare this generation's per-item scores against the previous generation's
+/// and write `<gen_dir>/conservation.json` — the capability-conservation guard.
+///
+/// Reads `details[]` from generations `current_gen - 1` and `current_gen`, builds
+/// a [`CapabilitySnapshot`] for each, and runs [`check_conservation`]. The
+/// artifact flags the Goodhart case the per-run accuracy chart hides: a
+/// generation whose mean score *rose* while a subset of items silently
+/// regressed.
+///
+/// Artifact shape:
+///
+/// ```json
+/// {
+///   "generation": 2,
+///   "conserved": false,
+///   "previous_mean": 0.5,
+///   "current_mean": 0.75,
+///   "net_delta": 0.25,
+///   "tolerance": 1e-9,
+///   "regressions": [{"item": "q2", "before": 1.0, "after": 0.0, "delta": -1.0}],
+///   "improvements": [ ... ],
+///   "dropped": ["q9"]
+/// }
+/// ```
+///
+/// # Best-effort
+///
+/// Returns `None` (and writes nothing) for `current_gen < 1`, or when either
+/// generation lacks a readable `details[]` array. Never panics; never mutates
+/// any existing artifact.
+pub fn record_conservation(
+    layout: &RunLayout,
+    current_gen: i64,
+    tolerance: f64,
+) -> Option<Value> {
+    if current_gen < 1 {
+        return None;
+    }
+    let prev = snapshot_from_results(&layout.gen_dir(current_gen - 1))?;
+    let curr = snapshot_from_results(&layout.gen_dir(current_gen))?;
+    let report = check_conservation(&prev, &curr, tolerance);
+
+    let to_change = |c: &crate::verifier::CapabilityChange| {
+        json!({"item": c.item, "before": c.before, "after": c.after, "delta": c.delta()})
+    };
+    let artifact = json!({
+        "generation": current_gen,
+        "conserved": report.conserved,
+        "previous_mean": report.previous_mean,
+        "current_mean": report.current_mean,
+        "net_delta": report.net_delta(),
+        "tolerance": report.tolerance,
+        "regressions": report.regressions.iter().map(to_change).collect::<Vec<_>>(),
+        "improvements": report.improvements.iter().map(to_change).collect::<Vec<_>>(),
+        "dropped": report.dropped,
+    });
+
+    let out_path = Path::new(&layout.gen_dir(current_gen)).join(CONSERVATION_JSON);
+    if let Ok(text) = serde_json::to_string_pretty(&artifact) {
+        let _ = std::fs::write(&out_path, text);
+    }
+    Some(artifact)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,6 +590,80 @@ mod tests {
             .unwrap();
         }
         (d, layout)
+    }
+
+    /// Write a `results.json` whose `details[]` carries per-item `is_correct`
+    /// flags keyed by `question_id`.
+    fn write_details(layout: &RunLayout, gen: i64, items: &[(&str, bool)]) {
+        let gen_dir = layout.gen_dir(gen);
+        std::fs::create_dir_all(&gen_dir).unwrap();
+        let details: Vec<Value> = items
+            .iter()
+            .map(|(id, ok)| json!({"question_id": id, "is_correct": ok}))
+            .collect();
+        let correct = items.iter().filter(|(_, ok)| *ok).count();
+        std::fs::write(
+            Path::new(&gen_dir).join(names::RESULTS_JSON),
+            json!({"accuracy": correct as f64 / items.len() as f64, "details": details}).to_string(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn record_conservation_flags_goodhart_regression() {
+        // gen0 mean 0.5, gen1 mean 0.75 — but q2 regressed pass->fail.
+        let d = tempfile::tempdir().unwrap();
+        let run_dir = d.path().join("run_1");
+        std::fs::create_dir_all(&run_dir).unwrap();
+        let layout = RunLayout::new(run_dir.to_string_lossy().into_owned());
+        write_details(
+            &layout,
+            0,
+            &[("q1", true), ("q2", true), ("q3", false), ("q4", false)],
+        );
+        write_details(
+            &layout,
+            1,
+            &[("q1", true), ("q2", false), ("q3", true), ("q4", true)],
+        );
+
+        let artifact =
+            record_conservation(&layout, 1, DEFAULT_CONSERVATION_TOLERANCE).expect("report");
+        assert_eq!(artifact["conserved"], json!(false));
+        assert!(artifact["net_delta"].as_f64().unwrap() > 0.0);
+        let regs = artifact["regressions"].as_array().unwrap();
+        assert_eq!(regs.len(), 1);
+        assert_eq!(regs[0]["item"], json!("q2"));
+        assert_eq!(regs[0]["delta"], json!(-1.0));
+
+        // Artifact persisted to disk next to results.json.
+        let path = Path::new(&layout.gen_dir(1)).join(CONSERVATION_JSON);
+        assert!(path.is_file(), "conservation.json must be written");
+    }
+
+    #[test]
+    fn record_conservation_conserved_when_only_improvements() {
+        let d = tempfile::tempdir().unwrap();
+        let run_dir = d.path().join("run_1");
+        std::fs::create_dir_all(&run_dir).unwrap();
+        let layout = RunLayout::new(run_dir.to_string_lossy().into_owned());
+        write_details(&layout, 0, &[("q1", true), ("q2", false)]);
+        write_details(&layout, 1, &[("q1", true), ("q2", true)]);
+        let artifact = record_conservation(&layout, 1, DEFAULT_CONSERVATION_TOLERANCE).unwrap();
+        assert_eq!(artifact["conserved"], json!(true));
+        assert_eq!(artifact["regressions"].as_array().unwrap().len(), 0);
+        assert_eq!(artifact["improvements"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn record_conservation_best_effort_when_no_details() {
+        // gen0 has only an accuracy (no details[]) -> None, no artifact, no panic.
+        let (_d, layout) = make_run(&[0.4, 0.6]);
+        assert!(record_conservation(&layout, 1, DEFAULT_CONSERVATION_TOLERANCE).is_none());
+        assert!(record_conservation(&layout, 0, DEFAULT_CONSERVATION_TOLERANCE).is_none());
+        assert!(!Path::new(&layout.gen_dir(1))
+            .join(CONSERVATION_JSON)
+            .exists());
     }
 
     fn write_telemetry(layout: &RunLayout, gen: i64, total_tokens: u64) {

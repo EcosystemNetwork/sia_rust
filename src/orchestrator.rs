@@ -705,6 +705,34 @@ pub fn run_generation_with(
         }
     }
 
+    // Capability-conservation guard (anti-Goodhart): compare this generation's
+    // per-item scores against the previous generation's and write
+    // `conservation.json`. Purely additive + best-effort, like the scheduler
+    // block above — it only writes a NEW artifact and a log line, guards every
+    // failure, and never affects control flow or the return value.
+    {
+        if let Some(c) = crate::closed_loop::record_conservation(
+            &layout,
+            current_gen,
+            crate::closed_loop::DEFAULT_CONSERVATION_TOLERANCE,
+        ) {
+            let conserved = c.get("conserved").and_then(|v| v.as_bool()).unwrap_or(true);
+            let net = c.get("net_delta").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let regressions = c
+                .get("regressions")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            if conserved {
+                println!("[conservation] gen {current_gen}: conserved (net {net:+.3})");
+            } else {
+                println!(
+                    "[conservation] gen {current_gen}: ⚠ {regressions} regression(s) despite net {net:+.3} — possible Goodhart over-fit"
+                );
+            }
+        }
+    }
+
     // Add generation to context.
     let improvement_md_path = layout.improvement_md(current_gen);
     let execution_type = if Path::new(&layout.agent_execution_dir(current_gen)).is_dir() {

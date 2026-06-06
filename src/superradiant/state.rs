@@ -11,7 +11,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -212,6 +212,11 @@ pub struct SuperradiantHandle {
     pub runs_root: PathBuf,
     /// When set, admin/control endpoints require a matching `X-Admin-Token`.
     pub admin_token: Option<String>,
+    /// Postgres-backed store for user-supplied provider credentials. `None`
+    /// when `DATABASE_URL` is unset — the credential UI / house competitors are
+    /// disabled but external workers keep working.
+    #[cfg(feature = "superradiant-db")]
+    pub credentials: Option<crate::superradiant::credentials::CredentialStore>,
 }
 
 fn now_ms() -> u128 {
@@ -222,11 +227,38 @@ fn now_ms() -> u128 {
 }
 
 impl SuperradiantHandle {
-    /// Build a handle, discovering selectable benchmarks up front.
-    pub fn new(runs_root: impl Into<PathBuf>, admin_token: Option<String>) -> std::sync::Arc<Self> {
+    /// Build a handle, discovering selectable benchmarks up front. No credential
+    /// store (house competitors disabled).
+    pub fn new(runs_root: impl Into<PathBuf>, admin_token: Option<String>) -> Arc<Self> {
+        Self::build(
+            runs_root.into(),
+            admin_token,
+            #[cfg(feature = "superradiant-db")]
+            None,
+        )
+    }
+
+    /// Build a handle with an optional Postgres credential store, enabling the
+    /// credential UI + in-process house competitors.
+    #[cfg(feature = "superradiant-db")]
+    pub fn with_credentials(
+        runs_root: impl Into<PathBuf>,
+        admin_token: Option<String>,
+        credentials: Option<crate::superradiant::credentials::CredentialStore>,
+    ) -> Arc<Self> {
+        Self::build(runs_root.into(), admin_token, credentials)
+    }
+
+    fn build(
+        runs_root: PathBuf,
+        admin_token: Option<String>,
+        #[cfg(feature = "superradiant-db")] credentials: Option<
+            crate::superradiant::credentials::CredentialStore,
+        >,
+    ) -> Arc<Self> {
         let (events, _rx) = broadcast::channel(256);
         let benchmarks = discover_benchmarks();
-        std::sync::Arc::new(SuperradiantHandle {
+        Arc::new(SuperradiantHandle {
             inner: Mutex::new(SuperradiantInner {
                 agents: HashMap::new(),
                 benchmarks,
@@ -236,8 +268,10 @@ impl SuperradiantHandle {
                 seq: 0,
             }),
             events,
-            runs_root: runs_root.into(),
+            runs_root,
             admin_token,
+            #[cfg(feature = "superradiant-db")]
+            credentials,
         })
     }
 
@@ -650,9 +684,10 @@ impl SuperradiantHandle {
 
     fn prune_stale(&self, g: &mut SuperradiantInner) {
         let now = now_ms();
-        // Never drop an agent that is mid-run; only idle stragglers.
+        // Never drop an agent that is mid-run; only idle stragglers. House
+        // competitors are server-driven (no heartbeats) so they are never pruned.
         g.agents.retain(|_, a| {
-            if a.status == AgentStatus::Running {
+            if a.status == AgentStatus::Running || a.kind == "house" {
                 return true;
             }
             now.saturating_sub(a.last_heartbeat_ms) <= STALE_AFTER_MS
@@ -663,6 +698,201 @@ impl SuperradiantHandle {
         let snap = self.snapshot_locked(g);
         // Best-effort: a send error just means no current subscribers.
         let _ = self.events.send(snap.to_string());
+    }
+
+    // --- house competitors (in-process, server-driven) ------------------- //
+
+    /// Register (or idempotently refresh) a house competitor backed by a stored
+    /// credential. House agents sit in the waiting room like external workers
+    /// but are driven by the server during a battle. Returns the agent id.
+    #[cfg(feature = "superradiant-db")]
+    pub fn register_house(
+        &self,
+        credential_id: &str,
+        name: &str,
+        model: &str,
+        client_kind: &str,
+    ) -> String {
+        let mut g = self.inner.lock().unwrap();
+        // Reuse the existing house agent for this credential if present.
+        if let Some(existing) = g.agents.values().find(|a| {
+            a.kind == "house"
+                && a.meta.get("credential_id").and_then(|v| v.as_str()) == Some(credential_id)
+        }) {
+            let id = existing.id.clone();
+            self.broadcast(&g);
+            return id;
+        }
+        g.seq += 1;
+        let seq = g.seq;
+        let now = now_ms();
+        let id = format!("house_{seq:x}_{:x}", now & 0xffffff);
+        let session = AgentSession {
+            id: id.clone(),
+            name: if name.trim().is_empty() {
+                model.to_string()
+            } else {
+                name.to_string()
+            },
+            kind: "house".into(),
+            token: String::new(),
+            status: AgentStatus::Waiting,
+            registered_at_ms: now,
+            last_heartbeat_ms: now,
+            meta: json!({
+                "credential_id": credential_id,
+                "model": model,
+                "provider": client_kind,
+                "house": true,
+            }),
+            progress: None,
+            queue: VecDeque::new(),
+            history: Vec::new(),
+        };
+        g.agents.insert(id.clone(), session);
+        self.broadcast(&g);
+        id
+    }
+
+    /// Pop the next queued assignment for a house agent and mark it running.
+    /// Mirrors the heartbeat dispatch path but for the server-driven loop.
+    #[cfg(feature = "superradiant-db")]
+    fn dispatch_house(&self, agent_id: &str) -> Option<DispatchedAssignment> {
+        let mut g = self.inner.lock().unwrap();
+        let config = g.config.clone();
+        let agent = g.agents.get_mut(agent_id)?;
+        if agent.status == AgentStatus::Running {
+            return None;
+        }
+        let mut a = agent.queue.pop_front()?;
+        a.status = AssignmentStatus::Running;
+        a.started_ms = Some(now_ms());
+        let dispatched = DispatchedAssignment {
+            assignment_id: a.id.clone(),
+            battle_id: a.battle_id.clone(),
+            benchmark_id: a.benchmark_id.clone(),
+            config,
+        };
+        agent.progress = Some(format!("running {}", a.benchmark_id));
+        agent.history.push(a);
+        agent.status = AgentStatus::Running;
+        self.broadcast(&g);
+        Some(dispatched)
+    }
+
+    /// Current display name of an agent, for the persisted run directory.
+    #[cfg(feature = "superradiant-db")]
+    fn agent_name_of(&self, agent_id: &str) -> Option<String> {
+        let g = self.inner.lock().unwrap();
+        g.agents.get(agent_id).map(|a| a.name.clone())
+    }
+
+    /// Mark every outstanding assignment for a house agent as failed (used when
+    /// its credential can't be resolved before any work runs).
+    #[cfg(feature = "superradiant-db")]
+    fn fail_remaining(&self, agent_id: &str, msg: &str) {
+        let mut g = self.inner.lock().unwrap();
+        if let Some(agent) = g.agents.get_mut(agent_id) {
+            while let Some(mut a) = agent.queue.pop_front() {
+                a.status = AssignmentStatus::Failed;
+                a.finished_ms = Some(now_ms());
+                a.error = Some(msg.to_string());
+                agent.history.push(a);
+            }
+            for a in agent.history.iter_mut() {
+                if matches!(a.status, AssignmentStatus::Running | AssignmentStatus::Pending) {
+                    a.status = AssignmentStatus::Failed;
+                    a.finished_ms = Some(now_ms());
+                    a.error = Some(msg.to_string());
+                }
+            }
+            agent.progress = None;
+            agent.status = AgentStatus::Done;
+        }
+        self.refresh_battle_status(&mut g);
+        self.broadcast(&g);
+    }
+
+    /// After a `go`, spawn a background driver per house agent that has queued
+    /// work. Each driver runs its assignments serially in-process and commits
+    /// results through the same path external workers use. No-op without a
+    /// credential store. Must be called from within the Tokio runtime.
+    #[cfg(feature = "superradiant-db")]
+    pub fn spawn_house_drivers(self: &Arc<Self>) {
+        let Some(store) = self.credentials.clone() else {
+            return;
+        };
+        let targets: Vec<(String, String)> = {
+            let g = self.inner.lock().unwrap();
+            g.agents
+                .values()
+                .filter(|a| {
+                    a.kind == "house" && !a.queue.is_empty() && a.status != AgentStatus::Running
+                })
+                .map(|a| {
+                    (
+                        a.id.clone(),
+                        a.meta
+                            .get("credential_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                    )
+                })
+                .collect()
+        };
+        for (agent_id, cred_id) in targets {
+            let handle = Arc::clone(self);
+            let store = store.clone();
+            tokio::spawn(async move {
+                handle.run_house_agent(agent_id, cred_id, store).await;
+            });
+        }
+    }
+
+    /// Drive one house agent's queue to completion.
+    #[cfg(feature = "superradiant-db")]
+    async fn run_house_agent(
+        self: Arc<Self>,
+        agent_id: String,
+        cred_id: String,
+        store: crate::superradiant::credentials::CredentialStore,
+    ) {
+        let cred = match store.resolve(&cred_id).await {
+            Ok(c) => c,
+            Err(e) => {
+                self.fail_remaining(&agent_id, &format!("credential error: {e}"));
+                return;
+            }
+        };
+        while let Some(d) = self.dispatch_house(&agent_id) {
+            let runs_root = self.runs_root.clone();
+            let agent_name = self
+                .agent_name_of(&agent_id)
+                .unwrap_or_else(|| agent_id.clone());
+            let cred = cred.clone();
+            let battle_id = d.battle_id.clone();
+            let benchmark_id = d.benchmark_id.clone();
+            let config = d.config.clone();
+            let assignment_id = d.assignment_id.clone();
+            let outcome = tokio::task::spawn_blocking(move || {
+                crate::superradiant::house::run_house_assignment(
+                    &cred,
+                    &runs_root,
+                    &battle_id,
+                    &agent_name,
+                    &benchmark_id,
+                    &config,
+                )
+            })
+            .await
+            .unwrap_or_else(|e| AssignmentOutcome {
+                accuracy_percent: None,
+                run_dir: None,
+                error: Some(format!("house task panicked: {e}")),
+            });
+            let _ = self.complete_result(&agent_id, &assignment_id, outcome);
+        }
     }
 }
 

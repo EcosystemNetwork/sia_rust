@@ -44,11 +44,41 @@ glob = { version = "0.3", optional = true }
 # dependency (schemars 1.x; cache has 1.2.1).
 schemars = { version = "1", optional = true }
 
+# Superradiant credential store (Postgres) + CORS, gated behind `superradiant-db`.
+# `query!`-style compile-time macros are deliberately avoided so `cargo build`
+# never needs a live DATABASE_URL — only the runtime query API + `migrate!`
+# (which embeds the `migrations/` dir at build time) are used.
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "uuid",
+    "chrono",
+    "macros",
+    "migrate",
+], optional = true }
+aes-gcm = { version = "0.10", optional = true }
+base64 = { version = "0.22", optional = true }
+rand = { version = "0.8", optional = true }
+uuid = { version = "1", features = ["v4", "serde"], optional = true }
+tower-http = { version = "0.5", features = ["cors"], optional = true }
+
 [features]
 # Native LLM client (issue #50). Non-default so the published build stays lean.
 # Issue #39 adds the native Claude Anthropic Messages API tool-loop, which pulls
 # in `reqwest` (blocking HTTP transport) and `glob` (the Glob tool executor).
 llm = ["dep:rig-core", "dep:reqwest", "dep:glob", "dep:schemars"]
+# Superradiant Postgres-backed credential store + in-process "house" LLM
+# competitors + CORS for the Vercel/Railway split. Implies `llm` because house
+# competitors run models through the native LLM client.
+superradiant-db = [
+    "llm",
+    "dep:sqlx",
+    "dep:aes-gcm",
+    "dep:base64",
+    "dep:rand",
+    "dep:uuid",
+    "dep:tower-http",
+]
 
 [dev-dependencies]
 tempfile = "3"

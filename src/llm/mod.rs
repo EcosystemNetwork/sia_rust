@@ -70,7 +70,8 @@ pub use openai_api::{
 };
 pub use openhands_runner::{run_openhands_agent, OpenHandsEventLog, OpenHandsRunSummary};
 pub use provider_mapping::{
-    api_key_for, base_url_for, chat_transport_for, client_for, messages_transport_for, AgentClient,
+    api_key_for, base_url_for, base_url_for_kind, chat_transport_for, client_for,
+    client_for_with_key, messages_transport_for, AgentClient,
 };
 pub use pydantic_ai_runner::run_pydantic_ai_agent;
 pub use retry::{

@@ -1,0 +1,12 @@
+# Railway service config for the Superradiant backend.
+# Add the PostgreSQL plugin (sets DATABASE_URL) and set SUPERRADIANT_SECRET_KEY,
+# SUPERRADIANT_ADMIN_TOKEN, and SUPERRADIANT_CORS_ORIGIN in the service variables.
+# See docs/SUPERRADIANT_DEPLOY.md.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

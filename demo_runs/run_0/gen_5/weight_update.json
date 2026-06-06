@@ -1,0 +1,10 @@
+{
+  "generation": 5,
+  "kind": "lora",
+  "updater": "trl-sft",
+  "num_examples": 64,
+  "loss_before": 0.96,
+  "loss_after": 0.74,
+  "updated": true,
+  "details": "LoRA rank 16, 1 epoch, 64 preference pairs"
+}

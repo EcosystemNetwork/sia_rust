@@ -826,6 +826,10 @@ const SCHEDULER_DECISION_FILENAME: &str = "scheduler_decision.json";
 /// [`crate::closed_loop::WEIGHT_UPDATE_JSON`]).
 const WEIGHT_UPDATE_FILENAME: &str = "weight_update.json";
 
+/// Filename of the per-generation capability-conservation report (mirrors
+/// [`crate::closed_loop::CONSERVATION_JSON`]).
+const CONSERVATION_FILENAME: &str = "conservation.json";
+
 /// Raw `<gen>/scheduler_decision.json` for one generation, if present.
 ///
 /// Returns the parsed object the closed-loop layer writes (issue #84):
@@ -928,6 +932,80 @@ pub fn get_scheduler_timeline(runs_root: &Path, run_name: &str) -> Option<Value>
         "decisions": decisions,
         "counts": { "harness": harness, "weight": weight, "both": both },
         "total": decisions.len(),
+    }))
+}
+
+/// Run-level capability-conservation timeline (anti-Goodhart guard).
+///
+/// Aggregates each generation's `conservation.json` (written by
+/// [`crate::closed_loop::record_conservation`]) into an ordered series, plus a
+/// summary tally. The headline number is `goodhart_flags`: generations whose
+/// mean score *rose* (`net_delta > 0`) yet failed conservation — a higher
+/// accuracy that silently dropped capability. Returns `None` for an unknown run.
+pub fn get_conservation_timeline(runs_root: &Path, run_name: &str) -> Option<Value> {
+    let run_dir = safe_child(runs_root, run_name)?;
+    run_dir_index(run_name)?;
+    if !run_dir.is_dir() {
+        return None;
+    }
+
+    let mut generations: Vec<Value> = Vec::new();
+    let (mut conserved, mut violated, mut goodhart_flags) = (0u64, 0u64, 0u64);
+    let mut total_regressions = 0u64;
+
+    for (gen_index, gen_dir) in gen_dirs(&run_dir) {
+        let data = match read_json(&gen_dir.join(CONSERVATION_FILENAME)) {
+            Some(d) if d.is_object() => d,
+            _ => continue,
+        };
+
+        let is_conserved = data.get("conserved").and_then(Value::as_bool).unwrap_or(true);
+        let net = data.get("net_delta").and_then(Value::as_f64).unwrap_or(0.0);
+        let regressions = data
+            .get("regressions")
+            .and_then(Value::as_array)
+            .map(|a| a.len() as u64)
+            .unwrap_or(0);
+        total_regressions += regressions;
+        if is_conserved {
+            conserved += 1;
+        } else {
+            violated += 1;
+            if net > 0.0 {
+                goodhart_flags += 1;
+            }
+        }
+
+        let mut row = serde_json::Map::new();
+        let generation = data.get("generation").and_then(as_i64).unwrap_or(gen_index);
+        row.insert("generation".into(), Value::from(generation));
+        for key in [
+            "conserved",
+            "previous_mean",
+            "current_mean",
+            "net_delta",
+            "tolerance",
+            "regressions",
+            "improvements",
+            "dropped",
+        ] {
+            if let Some(v) = data.get(key) {
+                row.insert(key.into(), v.clone());
+            }
+        }
+        generations.push(Value::Object(row));
+    }
+
+    Some(serde_json::json!({
+        "run": run_name,
+        "generations": generations,
+        "summary": {
+            "conserved": conserved,
+            "violated": violated,
+            "goodhart_flags": goodhart_flags,
+            "total_regressions": total_regressions,
+        },
+        "total": generations.len(),
     }))
 }
 
@@ -1265,6 +1343,65 @@ mod tests {
         assert!(get_scheduler_timeline(&root, "run_999").is_none());
         assert!(get_scheduler_timeline(&root, "..").is_none());
         assert!(get_scheduler_timeline(&root, "not_a_run").is_none());
+    }
+
+    #[test]
+    fn conservation_timeline_aggregates_and_flags_goodhart() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().join("runs");
+        let run = root.join("run_4");
+        let gen1 = run.join("gen_1");
+        let gen2 = run.join("gen_2");
+        std::fs::create_dir_all(&gen1).unwrap();
+        std::fs::create_dir_all(&gen2).unwrap();
+
+        // gen_1: conserved (mean rose, nothing regressed).
+        std::fs::write(
+            gen1.join("conservation.json"),
+            json!({"generation": 1, "conserved": true, "previous_mean": 0.33,
+                   "current_mean": 0.58, "net_delta": 0.25, "tolerance": 1e-9,
+                   "regressions": [], "improvements": [{"item":"q1","before":0.0,"after":1.0,"delta":1.0}],
+                   "dropped": []})
+            .to_string(),
+        )
+        .unwrap();
+        // gen_2: THE Goodhart case — mean rose but an item regressed.
+        std::fs::write(
+            gen2.join("conservation.json"),
+            json!({"generation": 2, "conserved": false, "previous_mean": 0.58,
+                   "current_mean": 0.75, "net_delta": 0.17, "tolerance": 1e-9,
+                   "regressions": [{"item":"q8","before":1.0,"after":0.0,"delta":-1.0}],
+                   "improvements": [], "dropped": []})
+            .to_string(),
+        )
+        .unwrap();
+
+        let v = get_conservation_timeline(&root, "run_4").expect("run exists");
+        assert_eq!(v["run"], json!("run_4"));
+        let gens = v["generations"].as_array().unwrap();
+        assert_eq!(gens.len(), 2);
+        assert_eq!(gens[0]["generation"], json!(1));
+        assert_eq!(gens[0]["conserved"], json!(true));
+        assert_eq!(gens[1]["generation"], json!(2));
+        assert_eq!(gens[1]["conserved"], json!(false));
+
+        // Summary: 1 conserved, 1 violated, and exactly 1 Goodhart flag
+        // (violated WITH a positive net_delta). 1 total regression.
+        assert_eq!(v["summary"]["conserved"], json!(1));
+        assert_eq!(v["summary"]["violated"], json!(1));
+        assert_eq!(v["summary"]["goodhart_flags"], json!(1));
+        assert_eq!(v["summary"]["total_regressions"], json!(1));
+        assert_eq!(v["total"], json!(2));
+    }
+
+    #[test]
+    fn conservation_timeline_empty_and_missing_run() {
+        let (_d, root) = make_run(false);
+        let v = get_conservation_timeline(&root, "run_3").expect("run exists");
+        assert_eq!(v["generations"].as_array().unwrap().len(), 0);
+        assert_eq!(v["summary"]["goodhart_flags"], json!(0));
+        assert!(get_conservation_timeline(&root, "run_999").is_none());
+        assert!(get_conservation_timeline(&root, "..").is_none());
     }
 
     #[test]

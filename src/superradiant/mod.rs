@@ -15,5 +15,12 @@ pub mod eval;
 pub mod routes;
 pub mod state;
 
+// Postgres-backed credential store + in-process "house" LLM competitors.
+// Gated behind `superradiant-db` (which implies `llm`).
+#[cfg(feature = "superradiant-db")]
+pub mod credentials;
+#[cfg(feature = "superradiant-db")]
+pub mod house;
+
 pub use routes::{router, superradiant_index_html};
 pub use state::SuperradiantHandle;
