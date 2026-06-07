@@ -17,11 +17,13 @@
 //! `query!`-style compile-time macros are intentionally avoided so `cargo build`
 //! never needs a live `DATABASE_URL`.
 
+use std::str::FromStr;
+
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::{PgPoolOptions, PgRow};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgRow};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -141,9 +143,20 @@ impl CredentialStore {
     pub async fn connect(database_url: &str) -> SiaResult<Self> {
         // Fail fast if the encryption key is missing/malformed.
         secret_key()?;
+
+        // Supabase (and any PgBouncer transaction-mode pooler) does not support
+        // persistent server-side prepared statements, which sqlx caches by
+        // default — that surfaces as intermittent "prepared statement already
+        // exists" errors. Disabling the statement cache keeps us compatible with
+        // both the pooler and a direct connection. SSL mode is taken from the
+        // URL (`?sslmode=require` for Supabase); a plain local URL still works.
+        let opts = PgConnectOptions::from_str(database_url)
+            .map_err(|e| SiaError::new(format!("invalid DATABASE_URL: {e}")))?
+            .statement_cache_capacity(0);
+
         let pool = PgPoolOptions::new()
             .max_connections(5)
-            .connect(database_url)
+            .connect_with(opts)
             .await
             .map_err(|e| SiaError::new(format!("could not connect to Postgres: {e}")))?;
         sqlx::migrate!("./migrations")

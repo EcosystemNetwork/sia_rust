@@ -35,10 +35,29 @@ run automatically at startup.
 
 1. New project → deploy this repo. The included `Dockerfile` builds with
    `--features superradiant-db`.
-2. Add the **PostgreSQL** plugin → it sets `DATABASE_URL`.
+2. Provide Postgres via either the Railway **PostgreSQL** plugin (sets
+   `DATABASE_URL` automatically) or **Supabase** (see below) — set `DATABASE_URL`
+   manually for Supabase.
 3. Set `SUPERRADIANT_SECRET_KEY`, `SUPERRADIANT_ADMIN_TOKEN`, and
    `SUPERRADIANT_CORS_ORIGIN` (your Vercel URL) in the service variables.
 4. Deploy. The dashboard is at `https://<service>.up.railway.app/superradiant`.
+
+## Postgres via Supabase
+
+1. Supabase project → **Project Settings → Database → Connection string → URI**.
+2. Use the **Connection pooler** URI (Transaction mode, host
+   `...pooler.supabase.com`, port `6543`) — it's IPv4 and works from Railway.
+   It looks like:
+   ```
+   postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require
+   ```
+3. Set that as `DATABASE_URL` on the backend. `?sslmode=require` (Supabase
+   requires SSL) is honored automatically.
+
+The server disables sqlx's prepared-statement cache, so the PgBouncer
+transaction-mode pooler works without "prepared statement already exists"
+errors. The direct connection (port `5432`) also works where IPv6 egress is
+available. Migrations run automatically on first boot — no manual SQL needed.
 
 ## Vercel (frontend, optional split)
 
