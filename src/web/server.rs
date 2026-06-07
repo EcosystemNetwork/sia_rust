@@ -130,8 +130,14 @@ fn assemble(runs_root: PathBuf, superradiant: Router) -> Router {
 }
 
 /// CORS for the static frontend (Vercel) → backend (Railway) split. Origins
-/// come from `SUPERRADIANT_CORS_ORIGIN` (comma-separated); unset = permissive
-/// (dev). `X-Admin-Token` is allowed so the dashboard can authenticate.
+/// come from `SUPERRADIANT_CORS_ORIGIN` (comma-separated). `X-Admin-Token` is
+/// allowed so the dashboard can authenticate.
+///
+/// Fail-closed: when no origin is configured, no cross-origin requests are
+/// permitted (same-origin still works without CORS headers). A wildcard `Any`
+/// origin — dangerous when combined with the `X-Admin-Token` auth header — is
+/// only used when explicitly opted into via `SUPERRADIANT_CORS_ALLOW_ANY=1`,
+/// intended for local development.
 #[cfg(feature = "superradiant-db")]
 fn cors_layer() -> tower_http::cors::CorsLayer {
     use axum::http::{header, HeaderName, Method};
@@ -139,6 +145,9 @@ fn cors_layer() -> tower_http::cors::CorsLayer {
 
     let methods = [Method::GET, Method::POST, Method::DELETE, Method::OPTIONS];
     let headers = [header::CONTENT_TYPE, HeaderName::from_static("x-admin-token")];
+    let base = CorsLayer::new()
+        .allow_methods(methods)
+        .allow_headers(headers);
 
     match std::env::var("SUPERRADIANT_CORS_ORIGIN") {
         Ok(origins) if !origins.trim().is_empty() => {
@@ -146,16 +155,26 @@ fn cors_layer() -> tower_http::cors::CorsLayer {
                 .split(',')
                 .filter_map(|o| o.trim().parse().ok())
                 .collect();
-            CorsLayer::new()
-                .allow_origin(list)
-                .allow_methods(methods)
-                .allow_headers(headers)
+            base.allow_origin(list)
         }
-        _ => CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(methods)
-            .allow_headers(headers),
+        _ if env_flag("SUPERRADIANT_CORS_ALLOW_ANY") => {
+            eprintln!(
+                "WARNING: SUPERRADIANT_CORS_ALLOW_ANY is set — allowing ANY origin to call the \
+                 API with the X-Admin-Token header. Use only for local development."
+            );
+            base.allow_origin(Any)
+        }
+        // No origin configured: fail closed (same-origin only).
+        _ => base,
     }
+}
+
+/// Read a boolean-ish environment flag (`1`/`true`/`yes`, case-insensitive).
+#[cfg(feature = "superradiant-db")]
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
 }
 
 /// Connect the Postgres credential store from `DATABASE_URL`, if set. Logs and
