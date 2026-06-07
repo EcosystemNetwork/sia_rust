@@ -565,6 +565,127 @@ pub fn record_conservation(
     Some(artifact)
 }
 
+// --------------------------------------------------------------------------- //
+// 4. Closing the loop: feed the signals back into the next generation
+// --------------------------------------------------------------------------- //
+
+/// Render an **adaptive guidance** block for the *next* generation's feedback
+/// prompt from this generation's closed-loop artifacts (the scheduler decision,
+/// the capability-conservation report, and any reference weight-update outcome).
+///
+/// This is what turns the closed-loop signals from *observational* into
+/// *causal*: [`crate::orchestrator::run_feedback_agent`] appends the returned
+/// block to the feedback prompt, so the meta-agent that writes generation N+1 is
+/// explicitly steered by (a) whether the harness lever has plateaued and (b)
+/// which specific items regressed (the anti-Goodhart guard) — rather than the
+/// artifacts only being written to disk for the dashboard.
+///
+/// The block is read from the artifacts that [`record_scheduler_decision`],
+/// [`maybe_run_weight_update`], and [`record_conservation`] already wrote for
+/// `current_gen` (all of which run before the feedback agent in
+/// [`crate::orchestrator::run_generation_with`]), so this adds no new
+/// computation — only a read + render.
+///
+/// # Best-effort / parity
+///
+/// Returns `None` when none of the three artifacts exist (e.g. generation 0, or
+/// a run with no readable score), so the feedback prompt is byte-for-byte
+/// unchanged in that case and the prompt-parity golden tests are unaffected.
+/// Never panics.
+pub fn build_adaptive_guidance(layout: &RunLayout, current_gen: i64) -> Option<String> {
+    if current_gen < 0 {
+        return None;
+    }
+    let dir = layout.gen_dir(current_gen);
+    let dir = Path::new(&dir);
+
+    let scheduler = read_json(&dir.join(SCHEDULER_DECISION_JSON));
+    let conservation = read_json(&dir.join(CONSERVATION_JSON));
+    let weight = read_json(&dir.join(WEIGHT_UPDATE_JSON));
+
+    if scheduler.is_none() && conservation.is_none() && weight.is_none() {
+        return None;
+    }
+
+    let mut out = format!(
+        "\n---\n\n**ADAPTIVE GUIDANCE (closed-loop signals from generation {current_gen})**:\n\n\
+         The SIA adaptive scheduler and capability-conservation guard analyzed this generation. \
+         Treat the following as priorities and hard constraints when you design the next improvement.\n"
+    );
+
+    if let Some(s) = &scheduler {
+        let decision = s
+            .get("decision")
+            .and_then(Value::as_str)
+            .unwrap_or("harness");
+        let rationale = s.get("rationale").and_then(Value::as_str).unwrap_or("");
+        let plateaued = s
+            .get("harness_plateaued")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        out.push_str(&format!("\n- **Lever recommendation:** `{decision}`. {rationale}\n"));
+        if decision == "weight" || plateaued {
+            out.push_str(
+                "  - Harness (prompt/scaffold) gains have plateaued — cosmetic prompt edits are \
+                 unlikely to move the score. Prioritize *high-leverage structural* changes \
+                 (better task decomposition, retrieval, self-verification, error recovery) over \
+                 wording tweaks.\n",
+            );
+        } else {
+            out.push_str(
+                "  - Harness updates are still improving the score; keep iterating on the \
+                 scaffold's structure.\n",
+            );
+        }
+    }
+
+    if let Some(c) = &conservation {
+        let conserved = c.get("conserved").and_then(Value::as_bool).unwrap_or(true);
+        let net = c.get("net_delta").and_then(Value::as_f64).unwrap_or(0.0);
+        let regressions = c.get("regressions").and_then(|v| v.as_array());
+        out.push_str(&format!(
+            "\n- **Capability conservation (net {net:+.3} vs the previous generation):**\n"
+        ));
+        match regressions {
+            Some(regs) if !regs.is_empty() => {
+                let items: Vec<String> = regs
+                    .iter()
+                    .filter_map(|r| r.get("item").map(value_to_key))
+                    .collect();
+                out.push_str(&format!(
+                    "  - ⚠ ANTI-REGRESSION: {} item(s) that were solved before got WORSE this \
+                     generation: {}. This is the Goodhart failure mode — the mean score can rise \
+                     while real capability is lost. Your next improvement MUST preserve the behavior \
+                     that handled these items; do not trade them away to chase the average.\n",
+                    items.len(),
+                    items.join(", "),
+                ));
+            }
+            _ => {
+                if conserved {
+                    out.push_str(
+                        "  - No per-item regressions detected — safe to build forward.\n",
+                    );
+                }
+            }
+        }
+    }
+
+    if let Some(w) = &weight {
+        let n = w.get("num_examples").and_then(Value::as_i64).unwrap_or(0);
+        let before = w.get("loss_before").and_then(Value::as_f64);
+        let after = w.get("loss_after").and_then(Value::as_f64);
+        if let (Some(b), Some(a)) = (before, after) {
+            out.push_str(&format!(
+                "\n- **Reference weight update:** ran on this generation's trajectory \
+                 ({n} example(s)); training loss {b:.4} → {a:.4}.\n"
+            ));
+        }
+    }
+
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -863,5 +984,67 @@ mod tests {
         let v =
             record_scheduler_decision(&layout, 2, &SchedulerConfig::default()).expect("decision");
         assert_eq!(v["decision"], json!("harness"));
+    }
+
+    #[test]
+    fn adaptive_guidance_is_none_without_artifacts() {
+        // No closed-loop artifacts written -> no guidance, so the feedback prompt
+        // is left byte-for-byte unchanged (prompt-parity goldens stay valid).
+        let (_d, layout) = make_run(&[0.5]);
+        assert!(build_adaptive_guidance(&layout, 0).is_none());
+        let d = tempfile::tempdir().unwrap();
+        let empty = RunLayout::new(d.path().join("run_x").to_string_lossy().into_owned());
+        assert!(build_adaptive_guidance(&empty, 0).is_none());
+        assert!(build_adaptive_guidance(&layout, -1).is_none());
+    }
+
+    #[test]
+    fn adaptive_guidance_surfaces_regressions_and_plateau() {
+        // A plateaued history with a per-item regression: the guidance must name
+        // the regressed item (anti-Goodhart) and steer away from cosmetic edits.
+        let d = tempfile::tempdir().unwrap();
+        let run_dir = d.path().join("run_1");
+        std::fs::create_dir_all(&run_dir).unwrap();
+        let layout = RunLayout::new(run_dir.to_string_lossy().into_owned());
+
+        // Plateaued scores so the scheduler recommends "weight". `read_gen_score`
+        // prefers `accuracy_percent`, so write it explicitly (and add per-item
+        // `details[]` on the last two gens for the conservation check) — that way
+        // both the plateau series and the regression survive in one results.json.
+        let pct = [10.0, 60.0, 60.5, 60.6, 60.65];
+        let details_by_gen: [Option<&[(&str, bool)]>; 5] = [
+            None,
+            None,
+            None,
+            Some(&[("q1", true), ("q2", true), ("q3", false)]),
+            Some(&[("q1", true), ("q2", false), ("q3", true)]), // q2 regresses pass->fail
+        ];
+        for (i, p) in pct.iter().enumerate() {
+            let gen_dir = layout.gen_dir(i as i64);
+            std::fs::create_dir_all(&gen_dir).unwrap();
+            let mut obj = json!({"accuracy_percent": p});
+            if let Some(items) = details_by_gen[i] {
+                let details: Vec<Value> = items
+                    .iter()
+                    .map(|(id, ok)| json!({"question_id": id, "is_correct": ok}))
+                    .collect();
+                obj["details"] = json!(details);
+            }
+            std::fs::write(
+                Path::new(&gen_dir).join(names::RESULTS_JSON),
+                obj.to_string(),
+            )
+            .unwrap();
+        }
+
+        record_scheduler_decision(&layout, 4, &SchedulerConfig::default()).expect("decision");
+        record_conservation(&layout, 4, DEFAULT_CONSERVATION_TOLERANCE).expect("conservation");
+
+        let guidance = build_adaptive_guidance(&layout, 4).expect("guidance");
+        assert!(guidance.contains("ADAPTIVE GUIDANCE"));
+        assert!(guidance.contains("Lever recommendation"));
+        assert!(guidance.contains("plateaued"), "should steer off cosmetic edits");
+        assert!(guidance.contains("ANTI-REGRESSION"));
+        assert!(guidance.contains("q2"), "must name the regressed item");
     }
 }

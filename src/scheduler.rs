@@ -49,12 +49,17 @@
 //!   efficiently compute is being converted into score and what the scheduler
 //!   recommends next.
 //!
-//! The current wiring is **observational**: the decision artifact is written each
-//! generation, but [`AdaptiveScheduler::decide_next`] does not yet branch the
-//! loop (i.e. harness-vs-weight choice is recorded but not acted on). Closing
-//! that loop — threading the decision into the improvement prompt /
-//! `improvement.md` for the next gen directory ([`crate::orchestrator::next_gen_dir`])
-//! — is tracked as a scheduler-drives-loop follow-up.
+//! The decision is now **fed back into the loop**: in addition to writing the
+//! decision artifact each generation, [`crate::closed_loop::build_adaptive_guidance`]
+//! renders the recommendation (plus the capability-conservation regressions and
+//! the reference weight-update outcome) into an "adaptive guidance" block that
+//! [`crate::orchestrator::run_feedback_agent`] appends to the next generation's
+//! feedback prompt — so a plateau recommendation steers the meta-agent toward
+//! high-leverage structural changes and flagged regressions become explicit
+//! anti-Goodhart constraints. The runtime still pulls only the harness lever
+//! (the weight lever remains the CPU reference updater, not a live trainer), so
+//! `decide_next` informs the harness step rather than branching into real
+//! weight training; wiring a live trainer is the remaining follow-up.
 //!
 //! # Heuristic, by design
 //!

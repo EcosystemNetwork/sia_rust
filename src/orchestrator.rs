@@ -822,7 +822,7 @@ pub fn run_feedback_agent(
         _ => None,
     };
 
-    let feedback_prompt = build_feedback_prompt(
+    let mut feedback_prompt = build_feedback_prompt(
         args.current_gen,
         args.max_gen,
         task_files,
@@ -837,6 +837,20 @@ pub fn run_feedback_agent(
         Some(target_provider),
         requirements_dir,
     );
+
+    // Close the loop (#84 follow-up): steer the meta-agent with THIS generation's
+    // closed-loop signals — the scheduler's harness-vs-weight recommendation, the
+    // capability-conservation regressions (anti-Goodhart), and the reference
+    // weight-update outcome. These artifacts were already written for
+    // `current_gen` earlier in `run_generation_with`, so this only reads + appends
+    // them. Best-effort and additive: when no artifacts exist (e.g. gen 0, or a
+    // run with no score) the prompt is byte-for-byte unchanged, preserving the
+    // `build_feedback_prompt` parity goldens (which call that function directly).
+    if let Some(guidance) =
+        crate::closed_loop::build_adaptive_guidance(&layout, args.current_gen)
+    {
+        feedback_prompt.push_str(&guidance);
+    }
 
     std::fs::create_dir_all(args.next_gen_dir).ok();
     if let Some(r) = resolved_ref {
