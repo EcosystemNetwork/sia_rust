@@ -1,0 +1,9 @@
+{
+  "generation": 3,
+  "decision": "both",
+  "recommended_next": "weight",
+  "harness_efficiency": 0.022,
+  "weight_efficiency": 0.028,
+  "harness_plateaued": false,
+  "rationale": "Harness slowing; weight updates now competitive \u2014 run both."
+}

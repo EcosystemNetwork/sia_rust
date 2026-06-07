@@ -1,0 +1,9 @@
+{
+  "generation": 5,
+  "decision": "weight",
+  "recommended_next": "weight",
+  "harness_efficiency": 0.007,
+  "weight_efficiency": 0.044,
+  "harness_plateaued": true,
+  "rationale": "Weight updates carry the final gains toward 92%."
+}

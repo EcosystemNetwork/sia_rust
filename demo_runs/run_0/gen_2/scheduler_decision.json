@@ -1,0 +1,9 @@
+{
+  "generation": 2,
+  "decision": "harness",
+  "recommended_next": "harness",
+  "harness_efficiency": 0.041,
+  "weight_efficiency": 0.0,
+  "harness_plateaued": false,
+  "rationale": "Harness still the best lever; reasoning scaffold refined."
+}
