@@ -353,7 +353,17 @@ mod tests {
     /// 32 zero bytes, base64-encoded — a deterministic test KEK.
     const TEST_KEK_B64: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
+    /// Serializes tests that mutate the process-global `SUPERRADIANT_SECRET_KEY`
+    /// env var, which otherwise race when the suite runs multi-threaded.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Acquire the env lock, recovering from a prior test's panic-poisoning.
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     fn with_kek<T>(f: impl FnOnce() -> T) -> T {
+        let _g = env_guard();
         let saved = std::env::var(SECRET_KEY_ENV).ok();
         std::env::set_var(SECRET_KEY_ENV, TEST_KEK_B64);
         let out = f();
@@ -394,6 +404,7 @@ mod tests {
 
     #[test]
     fn secret_key_rejects_wrong_length() {
+        let _g = env_guard();
         let saved = std::env::var(SECRET_KEY_ENV).ok();
         std::env::set_var(
             SECRET_KEY_ENV,

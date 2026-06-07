@@ -649,11 +649,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn admin_state_with_token_ok() {
+    async fn admin_state_with_header_ok() {
         let app = app();
         let resp = app
             .oneshot(
-                Request::get("/api/superradiant/state?token=secret")
+                Request::get("/api/superradiant/state")
+                    .header("x-admin-token", "secret")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -663,5 +664,49 @@ mod tests {
         let v = body_json(resp).await;
         assert!(v.get("agents").is_some());
         assert!(v.get("benchmarks").is_some());
+    }
+
+    /// The `?token=` query fallback must be rejected on non-stream admin routes
+    /// (tokens in URLs leak into logs); only the SSE `/stream` route accepts it.
+    #[tokio::test]
+    async fn query_token_rejected_off_stream() {
+        let app = app();
+        let resp = app
+            .oneshot(
+                Request::get("/api/superradiant/state?token=secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn stream_accepts_query_token() {
+        let app = app();
+        let resp = app
+            .oneshot(
+                Request::get("/api/superradiant/stream?token=secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn stream_rejects_bad_query_token() {
+        let app = app();
+        let resp = app
+            .oneshot(
+                Request::get("/api/superradiant/stream?token=wrong")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 }

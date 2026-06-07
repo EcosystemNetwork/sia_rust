@@ -120,7 +120,10 @@ fn assemble(runs_root: PathBuf, superradiant: Router) -> Router {
         .route("/", get(index))
         .route("/config.js", get(config_js))
         .with_state(state)
-        .merge(superradiant);
+        .merge(superradiant)
+        // Bound request bodies so an unauthenticated agent-facing POST (register/
+        // result) can't exhaust memory with an oversized payload.
+        .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_BYTES));
 
     #[cfg(feature = "superradiant-db")]
     {
@@ -128,6 +131,10 @@ fn assemble(runs_root: PathBuf, superradiant: Router) -> Router {
     }
     app
 }
+
+/// Maximum accepted request-body size (4 MiB). Agent result submissions carry
+/// trajectory/execution JSON, so this is generous, but it is still a hard cap.
+const MAX_BODY_BYTES: usize = 4 * 1024 * 1024;
 
 /// CORS for the static frontend (Vercel) → backend (Railway) split. Origins
 /// come from `SUPERRADIANT_CORS_ORIGIN` (comma-separated). `X-Admin-Token` is
@@ -360,6 +367,16 @@ fn not_found(detail: &str) -> Response {
 /// Run the server in the foreground (blocks). Used by `sia web`.
 pub fn serve(host: &str, port: u16, runs_dir: &str, _open_browser: bool) -> crate::SiaResult<()> {
     let addr = resolve_addr(host, port)?;
+    // Fail-closed: a non-loopback bind exposes the Superradiant control plane to
+    // the network. Without a configured admin token those endpoints are
+    // unauthenticated, so warn loudly. (A credential store additionally hard-
+    // fails below — see the `superradiant-db` branch.)
+    if !addr.ip().is_loopback() && admin_token_from_env().is_none() {
+        eprintln!(
+            "WARNING: binding {addr} (non-loopback) without SUPERRADIANT_ADMIN_TOKEN — \
+             Superradiant control endpoints are UNAUTHENTICATED. Set the token to lock them down."
+        );
+    }
     let resolved = std::fs::canonicalize(runs_dir).unwrap_or_else(|_| PathBuf::from(runs_dir));
     println!(
         "SIA visualizer serving {} at http://{}",
@@ -376,6 +393,16 @@ pub fn serve(host: &str, port: u16, runs_dir: &str, _open_browser: bool) -> crat
         #[cfg(feature = "superradiant-db")]
         let app = {
             let store = connect_credential_store().await;
+            // Fail-closed: the credential store holds users' encrypted API keys
+            // and exposes create/list/delete endpoints. Refuse to serve them
+            // without an admin token rather than expose them unauthenticated.
+            if store.is_some() && admin_token_from_env().is_none() {
+                return Err(crate::SiaError::new(
+                    "refusing to start: the Postgres credential store is enabled but \
+                     SUPERRADIANT_ADMIN_TOKEN is unset — credential endpoints would be \
+                     unauthenticated. Set SUPERRADIANT_ADMIN_TOKEN (or unset DATABASE_URL).",
+                ));
+            }
             let runs_root = canonical_runs_root(&runs_dir);
             let handle = crate::superradiant::SuperradiantHandle::with_credentials(
                 runs_root.clone(),
