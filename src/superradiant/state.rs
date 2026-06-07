@@ -172,6 +172,7 @@ pub struct HeartbeatReply {
 #[derive(Debug, Clone)]
 pub struct ResultContext {
     pub agent_name: String,
+    pub agent_kind: String,
     pub battle_id: String,
     pub benchmark_id: String,
     pub assignment_index: usize,
@@ -281,11 +282,21 @@ impl SuperradiantHandle {
     }
 
     /// Validate an admin token against the configured one (no-op if unset).
+    ///
+    /// The comparison is constant-time (via [`subtle`]) so a network attacker
+    /// cannot recover the token byte-by-byte from response-timing differences.
+    /// When no token is configured this is a no-op — production deploys must set
+    /// `SUPERRADIANT_ADMIN_TOKEN`; the server refuses to expose a credential
+    /// store or bind non-loopback without one (see `web::server`).
     pub fn check_admin(&self, provided: Option<&str>) -> Result<(), SuperradiantError> {
         match &self.admin_token {
             None => Ok(()),
             Some(expected) => {
-                if provided == Some(expected.as_str()) {
+                use subtle::ConstantTimeEq;
+                // `ct_eq` on slices returns 0 (false) for unequal lengths and
+                // otherwise compares every byte without early exit.
+                let provided = provided.unwrap_or("");
+                if provided.as_bytes().ct_eq(expected.as_bytes()).into() {
                     Ok(())
                 } else {
                     Err(SuperradiantError::Forbidden)
@@ -403,6 +414,7 @@ impl SuperradiantHandle {
             .ok_or(SuperradiantError::UnknownAssignment)?;
         Ok(ResultContext {
             agent_name: agent.name.clone(),
+            agent_kind: agent.kind.clone(),
             battle_id: a.battle_id.clone(),
             benchmark_id: a.benchmark_id.clone(),
             assignment_index: idx,
@@ -754,6 +766,31 @@ impl SuperradiantHandle {
         id
     }
 
+    /// On startup, re-register every stored credential as a house competitor so
+    /// they reappear in the waiting room without the operator re-selecting them.
+    /// Idempotent (reuses existing house agents) and best-effort. No-op without a
+    /// credential store.
+    #[cfg(feature = "superradiant-db")]
+    pub async fn rehydrate_house_from_store(&self) {
+        let Some(store) = self.credentials.clone() else {
+            return;
+        };
+        match store.list().await {
+            Ok(creds) => {
+                let n = creds.len();
+                for c in creds {
+                    self.register_house(&c.id, &c.name, &c.model, &c.client_kind);
+                }
+                if n > 0 {
+                    println!(
+                        "Superradiant: rehydrated {n} house competitor(s) from stored credentials."
+                    );
+                }
+            }
+            Err(e) => eprintln!("WARNING: could not rehydrate house competitors: {e}"),
+        }
+    }
+
     /// Pop the next queued assignment for a house agent and mark it running.
     /// Mirrors the heartbeat dispatch path but for the server-driven loop.
     #[cfg(feature = "superradiant-db")]
@@ -866,22 +903,28 @@ impl SuperradiantHandle {
             }
         };
         while let Some(d) = self.dispatch_house(&agent_id) {
-            let runs_root = self.runs_root.clone();
             let agent_name = self
                 .agent_name_of(&agent_id)
                 .unwrap_or_else(|| agent_id.clone());
-            let cred = cred.clone();
             let battle_id = d.battle_id.clone();
             let benchmark_id = d.benchmark_id.clone();
-            let config = d.config.clone();
+            let model = cred.model.clone();
             let assignment_id = d.assignment_id.clone();
+            // Independent clones moved into the blocking closure; the originals
+            // above stay live for recording the result afterwards.
+            let cred_run = cred.clone();
+            let runs_root_run = self.runs_root.clone();
+            let agent_name_run = agent_name.clone();
+            let battle_id_run = battle_id.clone();
+            let benchmark_id_run = benchmark_id.clone();
+            let config = d.config.clone();
             let outcome = tokio::task::spawn_blocking(move || {
                 crate::superradiant::house::run_house_assignment(
-                    &cred,
-                    &runs_root,
-                    &battle_id,
-                    &agent_name,
-                    &benchmark_id,
+                    &cred_run,
+                    &runs_root_run,
+                    &battle_id_run,
+                    &agent_name_run,
+                    &benchmark_id_run,
                     &config,
                 )
             })
@@ -891,7 +934,26 @@ impl SuperradiantHandle {
                 run_dir: None,
                 error: Some(format!("house task panicked: {e}")),
             });
+            // Persist to the all-time leaderboard before the outcome is moved.
+            let acc = outcome.accuracy_percent;
+            let run_dir = outcome.run_dir.clone();
             let _ = self.complete_result(&agent_id, &assignment_id, outcome);
+            if let Some(acc) = acc {
+                if let Err(e) = store
+                    .record_result(
+                        &battle_id,
+                        &agent_name,
+                        "house",
+                        &benchmark_id,
+                        acc,
+                        Some(&model),
+                        run_dir.as_deref(),
+                    )
+                    .await
+                {
+                    eprintln!("WARNING: could not record leaderboard result (house): {e}");
+                }
+            }
         }
     }
 }

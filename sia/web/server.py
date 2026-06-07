@@ -23,6 +23,7 @@ def create_app(runs_dir: str | Path):
     try:
         from fastapi import FastAPI, HTTPException
         from fastapi.responses import FileResponse, PlainTextResponse
+        from fastapi.staticfiles import StaticFiles
     except ModuleNotFoundError as exc:  # pragma: no cover - import guard
         raise RuntimeError(
             "The web visualizer needs FastAPI + uvicorn. Install with:\n    pip install 'sia-agent[web]'"
@@ -122,6 +123,19 @@ def create_app(runs_dir: str | Path):
     @app.get("/")
     def index():
         return FileResponse(_STATIC_DIR / "index.html")
+
+    # Agent-controlled aquarium (SIA Studio "Aquarium" tab). Static modules are
+    # always served so the tab loads; the agents/WebSocket only attach when
+    # SIA_AQUARIUM=1 and ANTHROPIC_API_KEY are set (see sia.web.aquarium.app).
+    _aquarium_assets = _STATIC_DIR / "aquarium"
+    if _aquarium_assets.exists():
+        app.mount("/aquarium", StaticFiles(directory=str(_aquarium_assets)), name="aquarium")
+    try:
+        from sia.web import aquarium
+
+        aquarium.register(app)
+    except Exception as exc:  # pragma: no cover - never break the visualizer
+        logger.warning(f"Aquarium tab unavailable: {exc}")
 
     return app
 

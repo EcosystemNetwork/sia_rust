@@ -65,7 +65,8 @@ pub fn router(handle: SuperradiantState) -> Router {
                 "/api/superradiant/providers/:id",
                 axum::routing::delete(api_providers_delete),
             )
-            .route("/api/superradiant/house", post(api_house));
+            .route("/api/superradiant/house", post(api_house))
+            .route("/api/superradiant/leaderboard", get(api_leaderboard));
     }
 
     router.with_state(handle)
@@ -91,16 +92,29 @@ fn agent_token(headers: &HeaderMap) -> &str {
         .unwrap_or("")
 }
 
-fn admin_token<'a>(headers: &'a HeaderMap, q: &'a TokenQuery) -> Option<&'a str> {
-    headers
-        .get("x-admin-token")
-        .and_then(|v| v.to_str().ok())
-        .or(q.token.as_deref())
+/// Resolve the admin token from the request.
+///
+/// The `X-Admin-Token` header is always honored. The `?token=` query-string
+/// fallback is honored **only** when `allow_query` is set, which is restricted
+/// to the SSE `/stream` route (EventSource cannot set headers). Query strings
+/// leak into access/proxy logs, browser history, and `Referer`, so every other
+/// admin endpoint — including all mutating ones — requires the header.
+fn admin_token<'a>(
+    headers: &'a HeaderMap,
+    q: &'a TokenQuery,
+    allow_query: bool,
+) -> Option<&'a str> {
+    let header = headers.get("x-admin-token").and_then(|v| v.to_str().ok());
+    if allow_query {
+        header.or(q.token.as_deref())
+    } else {
+        header
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
 pub struct TokenQuery {
-    /// Fallback admin token for clients (EventSource) that cannot set headers.
+    /// Fallback admin token for the SSE stream (EventSource cannot set headers).
     pub token: Option<String>,
 }
 
@@ -124,7 +138,7 @@ async fn api_state(
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     Json(h.snapshot()).into_response()
@@ -135,7 +149,9 @@ async fn api_stream(
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    // The SSE stream is the one route that accepts the `?token=` fallback,
+    // since EventSource clients cannot set the `X-Admin-Token` header.
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, true)) {
         return err_response(e);
     }
     let initial = h.snapshot().to_string();
@@ -169,7 +185,7 @@ async fn api_selection(
     Query(q): Query<TokenQuery>,
     Json(body): Json<SelectionBody>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     match h.set_selection(body.benchmark_ids, body.config) {
@@ -192,7 +208,7 @@ async fn api_go(
     Query(q): Query<TokenQuery>,
     Json(body): Json<GoBody>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     match h.go(body.agent_ids, body.benchmark_ids) {
@@ -211,7 +227,7 @@ async fn api_reset(
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     h.reset();
@@ -229,7 +245,7 @@ async fn api_kick(
     Query(q): Query<TokenQuery>,
     Json(body): Json<KickBody>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     h.kick(&body.agent_id);
@@ -354,8 +370,30 @@ async fn api_result(
         "run_dir": outcome.run_dir,
         "error": outcome.error,
     });
+    // Capture the scored bits before the outcome is moved into `complete_result`.
+    #[cfg(feature = "superradiant-db")]
+    let scored = (outcome.accuracy_percent, outcome.run_dir.clone());
     if let Err(e) = h.complete_result(&body.agent_id, &body.assignment_id, outcome) {
         return err_response(e);
+    }
+    // Persist the worker's scored result to the all-time leaderboard.
+    #[cfg(feature = "superradiant-db")]
+    if let (Some(store), (Some(acc), run_dir)) = (h.credentials.as_ref(), scored) {
+        let model = body.submission.get("model").and_then(|v| v.as_str());
+        if let Err(e) = store
+            .record_result(
+                &ctx.battle_id,
+                &ctx.agent_name,
+                &ctx.agent_kind,
+                &ctx.benchmark_id,
+                acc,
+                model,
+                run_dir.as_deref(),
+            )
+            .await
+        {
+            eprintln!("WARNING: could not record leaderboard result (worker): {e}");
+        }
     }
     Json(resp).into_response()
 }
@@ -424,7 +462,7 @@ async fn api_providers_list(
     headers: HeaderMap,
     Query(q): Query<TokenQuery>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     let Some(store) = h.credentials.as_ref() else {
@@ -443,7 +481,7 @@ async fn api_providers_create(
     Query(q): Query<TokenQuery>,
     Json(body): Json<crate::superradiant::credentials::NewCredential>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     let Some(store) = h.credentials.as_ref() else {
@@ -467,7 +505,7 @@ async fn api_providers_delete(
     Query(q): Query<TokenQuery>,
     Path(id): Path<String>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     let Some(store) = h.credentials.as_ref() else {
@@ -500,7 +538,7 @@ async fn api_house(
     Query(q): Query<TokenQuery>,
     Json(body): Json<HouseBody>,
 ) -> Response {
-    if let Err(e) = h.check_admin(admin_token(&headers, &q)) {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
         return err_response(e);
     }
     let Some(store) = h.credentials.as_ref() else {
@@ -521,6 +559,25 @@ async fn api_house(
         }
     }
     Json(h.snapshot()).into_response()
+}
+
+/// All-time leaderboard aggregated from persisted results (survives restarts).
+#[cfg(feature = "superradiant-db")]
+async fn api_leaderboard(
+    State(h): State<SuperradiantState>,
+    headers: HeaderMap,
+    Query(q): Query<TokenQuery>,
+) -> Response {
+    if let Err(e) = h.check_admin(admin_token(&headers, &q, false)) {
+        return err_response(e);
+    }
+    let Some(store) = h.credentials.as_ref() else {
+        return store_unavailable();
+    };
+    match store.leaderboard().await {
+        Ok(rows) => Json(rows).into_response(),
+        Err(e) => internal_err(e),
+    }
 }
 
 #[cfg(test)]

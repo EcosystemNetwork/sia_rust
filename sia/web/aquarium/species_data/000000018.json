@@ -1,0 +1,151 @@
+{
+  "species": {
+    "input_name": "seahorse",
+    "scientific_name": "Hippocampus abdominalis",
+    "genus": "Hippocampus",
+    "specific_epithet": "abdominalis",
+    "common_name": "Bigbelly seahorse",
+    "family": "Syngnathidae",
+    "order": "Syngnathiformes",
+    "class": ""
+  },
+  "morphology": {
+    "max_length_cm": 35.0,
+    "max_weight_kg": null,
+    "depth_range_m": null,
+    "body_shape_description": "angular. Biology Glossary (e.g. epibenthic) Found in large rock pools at low tide. They remain motionless amidst seawe",
+    "coloration_description": "The big-belly seahorse has a forward-tilted, a long-snouted head, a distended but narrow pot belly, and a long, coiled tail. They can be yellow, brown or sometimes white in colouration.[7]It swims using itsdorsal finwith a vertical stance; when not swimming, it coils itsprehensiletail around any sui",
+    "teeth_description": "",
+    "fins": {
+      "dorsal_spines": null,
+      "dorsal_rays": null,
+      "anal_spines": 0,
+      "anal_rays": 4
+    },
+    "fin_colors": {
+      "caudal": null,
+      "dorsal": "yellow",
+      "anal": null,
+      "pectoral": null,
+      "pelvic": null
+    },
+    "has_finlets": false,
+    "scale_type": "cycloid",
+    "coloration_details": {
+      "dorsal_color": "yellow",
+      "ventral_color": null,
+      "lateral_line_color": null,
+      "iridescent": false,
+      "pattern": "none",
+      "pattern_color": null
+    },
+    "trophic_level": 3.4,
+    "is_dangerous": false
+  },
+  "locomotion": {
+    "type": "subcarangiform",
+    "description": "Rear half of body undulates; the most common teleost swimming mode.",
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering"
+  },
+  "behavior": {
+    "max_speed_kmh": null,
+    "diet_keywords": [
+      "fish",
+      "crustaceans",
+      "plankton",
+      "shrimp",
+      "invertebrates",
+      "copepods"
+    ],
+    "description": "The big-belly seahorse or pot-bellied seahorse is one of the largest seahorse species in the world, with a length of up to 35 cm (14 in), and is the largest in Australia. Seahorses are members of the family Syngnathidae, and are teleost fishes. They are found in southeast Australia and New Zealand, and are listed on Appendix II of CITES. They are the only species of seahorse found in New Zealand, with a habitat range spanning from the Three Kings Island in the north all the way to the Snares Islands in the south.",
+    "sections": {
+      "section_description": "The big-belly seahorse has a forward-tilted, a long-snouted head, a distended but narrow pot belly, and a long, coiled tail. They can be yellow, brown or sometimes white in colouration.[7]It swims using itsdorsal finwith a vertical stance; when not swimming, it coils itsprehensiletail around any suitable growth, such asseaweed, waiting forplanktonicanimals to drift by, when they are sucked up by the small mouth set at the tip of the snout much like a vacuum cleaner. Seahorses are voracious feede",
+      "section_habitat_and_behavioural_ecolog": "Juvenile and adult big-belly seahorses, when given a choice, prefer vegetated areas (even with artificialseagrass) over open water. They consistently choose vegetated areas, even whenmysidprey is present in adjacent clear water. This preference is linked to their predatory behaviour as they rely onambush predation.[11] The density of vegetation also plays a role in the seahorses' foraging success. Increasing vegetation density from low to medium habitat complexity positively impacts the capture ",
+      "section_feeding_behaviour": "Adult seahorses eat 30 to 50 times a day if food is available; due to their slow consumption they must feed constantly to survive.[20]Big-belly seahorses do not have a stomach or teeth, so they feed by sucking smallinvertebratesin through their bony tubular snouts with a flick of their head. Their snouts can expand if the prey is larger than their snout, allowing them to consume a variety of organisms.[21] They are not able to chew so eat prey whole and then disintegrate their food to eat it.[22",
+      "section_visual_feeding_behaviour": "Big-belly seahorses are visually guided feeders whose eyes can move independently. They possess a rod-free convexiclivatefovea, characterized by a calculatedvisualresolution limit of 5.25 min of arc.  Seahorses have adapted their visual systems for efficient prey capturing in varied ecological settings.[25] Female, male and juvenile big-bellied seahorses make \"click\" sounds while feeding, often paired with a head movement called a \"snick\". Females click more frequently than males, suggesting a p",
+      "section_acoustic_feeding_behaviour": "Female, male and juvenile big-bellied seahorses make \"click\" sounds while feeding, often paired with a head movement called a \"snick\". Females click more frequently than males, suggesting a possible link tosexual selection. Click frequency is correlated with body condition, indicating that these sounds may provide clues about the seahorse's size and overall health, helping to signal to potential mates their size, fitness and quality.[26] Studies showed that the diet of adult wild big-belly seaho",
+      "section_diet": "Studies showed that the diet of adult wild big-belly seahorses when living in shallow subtidal macroalgal primarily consists of crustaceans.[9]Key components of the diet of the big-belly seahorse includeamphipods(such as caprellid and ischyrocerid amphipods),caridean shrimp(Hippolyte bifidirostris), and peracarids like themysid(Tenagomysis similis). There are no significant differences between the diets of male and female big-belly seahorses. However, smaller seahorses were found to consume more"
+    }
+  },
+  "blender_params": {
+    "body_depth_ratio": 0.2,
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering",
+    "feeding_style": "suction-strike",
+    "mouth_gape": "medium",
+    "is_dangerous": false,
+    "recommended_spine_bone_count": 8,
+    "animation_clips": [
+      {
+        "name": "idle_swim",
+        "description": "Looping swim cycle",
+        "frames": 48
+      },
+      {
+        "name": "turn_left",
+        "description": "Banking left turn",
+        "frames": 24
+      },
+      {
+        "name": "turn_right",
+        "description": "Banking right turn",
+        "frames": 24
+      },
+      {
+        "name": "dive",
+        "description": "Downward dive",
+        "frames": 30
+      },
+      {
+        "name": "surface",
+        "description": "Rising to surface",
+        "frames": 30
+      },
+      {
+        "name": "startle",
+        "description": "Escape-response burst",
+        "frames": 12
+      },
+      {
+        "name": "suction_feed",
+        "description": "Rapid suction strike",
+        "frames": 12
+      }
+    ],
+    "fishsim_params": {
+      "stroke_period": 28,
+      "max_tail_angle": 36,
+      "drag": 0.7,
+      "effort": 0.35,
+      "max_steering_angle": 40.0,
+      "hover_mode": false,
+      "note": "Import these values into the FishSim addon panel (extensions.blender.org/add-ons/fishsim/) after adding a fish rig."
+    }
+  },
+  "reference_images": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/74/Sketchbook_of_fishes_-_18._%28Pot_bellied%29_Sea_horse_-_William_Buelow_Gould%2C_c1832.jpg",
+      "thumbnail": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Sketchbook_of_fishes_-_18._%28Pot_bellied%29_Sea_horse_-_William_Buelow_Gould%2C_c1832.jpg/330px-Sketchbook_of_fishes_-_18._%28Pot_bellied%29_Sea_horse_-_William_Buelow_Gould%2C_c1832.jpg",
+      "source": "wikipedia",
+      "type": "adult",
+      "dims": [
+        1867,
+        2694
+      ]
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Hiabd_f0.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Hiabd_f0.jpg",
+      "source": "fishbase",
+      "type": "adult",
+      "dims": null
+    }
+  ],
+  "sources": {
+    "fishbase_url": "https://www.fishbase.se/summary/Hippocampus-abdominalis.html",
+    "wikipedia_url": "https://en.wikipedia.org/wiki/Big-belly_seahorse"
+  }
+}

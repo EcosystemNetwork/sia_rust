@@ -61,6 +61,10 @@ base64 = { version = "0.22", optional = true }
 rand = { version = "0.8", optional = true }
 uuid = { version = "1", features = ["v4", "serde"], optional = true }
 tower-http = { version = "0.5", features = ["cors"], optional = true }
+# Constant-time comparison for the Superradiant admin token (avoids a timing
+# side channel). Tiny, no-std; kept non-optional so the admin endpoints are
+# hardened in every build, not just `superradiant-db`.
+subtle = "2"
 
 [features]
 # Native LLM client (issue #50). Non-default so the published build stays lean.

@@ -1,0 +1,57 @@
+/* Scoped to .aquarium-view so it can drop into SIA Studio without clobbering
+   the dashboard's global styles. Ported from the standalone 2d-fish-aquariums
+   stylesheet (global body/header/* resets removed). */
+
+.aquarium-view .aquarium-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 12px;
+  margin: 8px 0 24px;
+}
+
+.aquarium-view .aquarium-frame {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(80,140,200,0.25);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6), inset 0 0 40px rgba(0,20,60,0.4);
+}
+
+.aquarium-view .aquarium-frame canvas {
+  display: block;
+  width: 100%;
+}
+
+.aquarium-view .aquarium-label {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(180,220,255,0.7);
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+
+.aquarium-view .agent-thought {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,10,30,0.75);
+  border: 1px solid rgba(80,160,220,0.3);
+  border-radius: 16px;
+  padding: 4px 14px;
+  font-size: 0.7rem;
+  color: rgba(160,210,240,0.85);
+  max-width: 80%;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aquarium-view .agent-thought.visible { opacity: 1; }

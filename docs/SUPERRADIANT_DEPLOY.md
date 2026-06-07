@@ -73,6 +73,21 @@ The dashboard is a single static page; it can be served by the backend directly
    localStorage).
 3. Ensure the backend's `SUPERRADIANT_CORS_ORIGIN` includes the Vercel origin.
 
+## Persistence
+
+| Data | Where | Survives restart? |
+| --- | --- | --- |
+| Provider credentials (encrypted keys) | Postgres | ✅ yes |
+| House competitors in the waiting room | rebuilt on startup from stored credentials (auto-rehydrate) | ✅ yes — reappear automatically |
+| Scored run history (`runs/superradiant__*`) | filesystem at `--runs-dir` | ✅ **only with a mounted volume** |
+| All-time leaderboard (per-result rows) | Postgres (`superradiant_results`) | ✅ yes — `GET /api/superradiant/leaderboard` |
+| Live battle view (current session matrix) | in-memory | ❌ resets on restart (results persist in the table above) |
+
+On boot the server re-registers every stored credential as a house competitor,
+so after a restart/redeploy your competitors are already in the waiting room —
+just hit **GO**. For run history to survive a Railway redeploy, attach a Volume
+at `/data` (the image's `--runs-dir` is `/data/runs`).
+
 ## Using it
 
 1. Open `/superradiant`, paste the admin token (topbar).

@@ -47,8 +47,16 @@
     border-radius: var(--r-sm); width: 30px; height: 30px; cursor: pointer; font-size: 14px;
     line-height: 1; display: flex; align-items: center; justify-content: center; }
   .theme-toggle:hover { border-color: var(--accent); }
+  .section-nav { display: flex; gap: 6px; padding: 10px 12px 2px; }
+  .section-link { flex: 1; text-align: center; padding: 7px 10px; border-radius: var(--r-sm);
+    border: 1px solid var(--border); color: var(--muted); background: var(--panel);
+    font-size: 13px; }
+  .section-link:hover { color: var(--text); text-decoration: none; border-color: var(--accent); }
+  .section-link.active { color: var(--text); background: var(--panel-2); border-color: var(--accent); }
   .run-search { padding: 10px 12px 6px; }
   .run-search input { width: 100%; }
+  /* Aquarium tab */
+  .aquarium-view { padding: 4px 0 8px; }
   .runlist { padding: 6px 8px 12px; overflow-y: auto; flex: 1; min-height: 0; }
   .run-item { display: block; padding: 10px 12px; border-radius: var(--r); cursor: pointer;
     border: 1px solid transparent; margin-bottom: 4px; }
@@ -250,6 +258,10 @@
       <div class="brand-left"><span class="dot"></span><h1>SIA STUDIO</h1></div>
       <button class="theme-toggle" id="themeToggle" type="button" title="Toggle dark / light mode" aria-label="Toggle theme">◐</button>
     </div>
+    <nav class="section-nav">
+      <a class="section-link" id="navRuns" href="#/">Runs</a>
+      <a class="section-link" id="navAquarium" href="#/aquarium">🐠 Aquarium</a>
+    </nav>
     <div class="run-search"><input id="runFilter" type="search" placeholder="Filter runs…" aria-label="Filter runs" /></div>
     <div class="sidebar-count" id="runCount"></div>
     <div class="runlist" id="runlist"></div>
@@ -438,6 +450,7 @@ function highlightPython(code) {
 
 // ---- Routing (hash) ---------------------------------------------------------
 let RUNS = [];
+let AQUARIUM = null;   // active AquariumGrid instance (so we can stop it on nav)
 async function boot() {
   initTheme();
   $("#runlist").append(skeleton(5));
@@ -497,7 +510,18 @@ let MOUNTED = { run: null, gen: null, tab: null };
 
 async function route() {
   const { run } = currentRoute();
+  syncSectionNav(run);
   syncSidebarActive();
+
+  if (run === "aquarium") {
+    if (MOUNTED.run !== "aquarium") {
+      MOUNTED = { run: "aquarium", gen: null, tab: null };
+      renderAquarium();
+    }
+    return;
+  }
+  teardownAquarium();
+
   if (!run) {
     MOUNTED = { run: null, gen: null, tab: null };
     document.title = "SIA Studio";
@@ -524,6 +548,83 @@ async function route() {
 
   if (MOUNTED.run !== run) { renderRun(detail); MOUNTED = { run, gen: null, tab: null }; }
   mountGen(detail);
+}
+
+// ---- Aquarium tab -----------------------------------------------------------
+// Agent-controlled 2D fish tanks (ported from 2d-fish-aquariums). The canvas /
+// renderer / WebSocket client live in /aquarium/js/*; here we lazy-load them
+// only when the tab is opened, and tear them down (stop rAF loops + sockets)
+// when navigating away so they never run in the background.
+function syncSectionNav(run) {
+  const onAq = run === "aquarium";
+  const aq = $("#navAquarium"), runs = $("#navRuns");
+  if (aq)   aq.classList.toggle("active", onAq);
+  if (runs) runs.classList.toggle("active", !onAq);
+}
+
+function teardownAquarium() {
+  if (AQUARIUM) { try { AQUARIUM.stop(); } catch {} AQUARIUM = null; }
+}
+
+async function renderAquarium() {
+  teardownAquarium();
+  const main = $("#main");
+  main.innerHTML = "";
+
+  VIEW.crumb = h("div", { class: "crumbs" });
+  VIEW.header = h("div", { class: "topbar" }, VIEW.crumb,
+    h("div", { class: "topbar-title" },
+      h("h2", {}, "Aquarium"),
+      h("span", { class: "started" }, "agent-controlled fish tanks")));
+  main.append(VIEW.header);
+  VIEW.crumb.append(h("a", { class: "crumb", href: "#/" }, "runs"),
+    h("span", { class: "crumb-sep" }, "›"), h("span", { class: "crumb cur" }, "aquarium"));
+  document.title = "Aquarium · SIA Studio";
+
+  const content = h("div", { class: "content" });
+  main.append(content);
+  content.append(skeleton(4));
+
+  let state;
+  try { state = await api("/api/aquarium/state"); }
+  catch (e) {
+    content.innerHTML = "";
+    content.append(emptyState("Aquarium unavailable",
+      "This server doesn’t expose the aquarium backend.", "🐠"));
+    return;
+  }
+  // Navigation may have moved on while we awaited.
+  if (currentRoute().run !== "aquarium") return;
+
+  content.innerHTML = "";
+  if (!state.enabled) {
+    content.append(emptyState("Aquarium backend is off",
+      "Launch SIA Studio with SIA_AQUARIUM=1 and ANTHROPIC_API_KEY set to start the " +
+      "agent-driven tanks — e.g. SIA_AQUARIUM=1 ANTHROPIC_API_KEY=… sia web", "🐠"));
+    return;
+  }
+
+  const count = state.count || Object.keys(state.aquariums || {}).length || 4;
+  if (!document.getElementById("aquarium-css")) {
+    document.head.append(h("link",
+      { id: "aquarium-css", rel: "stylesheet", href: "/aquarium/css/aquarium.css" }));
+  }
+  content.append(h("div", { class: "muted", style: "font-size:13px;margin:4px 0 10px" },
+    `${count} agent-controlled tank${count === 1 ? "" : "s"} · each Claude agent researches species, ` +
+    "populates its tank, and must feed every fish on its hunger timer."));
+  const view = h("div", { class: "aquarium-view" });
+  const gridEl = h("div", { class: "aquarium-grid" });
+  view.append(gridEl);
+  content.append(view);
+
+  try {
+    const { AquariumGrid } = await import("/aquarium/js/aquarium-grid.js");
+    if (currentRoute().run !== "aquarium") return;
+    AQUARIUM = new AquariumGrid(gridEl, count);
+    AQUARIUM.init();
+  } catch (e) {
+    content.append(errorState("Couldn’t load the aquarium renderer — " + esc(e.message)));
+  }
 }
 
 // ---- Sticky breadcrumb / wayfinding -----------------------------------------

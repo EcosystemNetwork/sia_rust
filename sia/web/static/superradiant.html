@@ -158,8 +158,17 @@
       </div>
 
       <div class="panel">
-        <h2>Leaderboard</h2>
+        <h2>Leaderboard <span class="count">live (this session)</span></h2>
         <div id="leaderboard"></div>
+      </div>
+
+      <div class="panel">
+        <h2>All-time Leaderboard
+          <span class="count">persisted across restarts</span>
+          <span class="spacer"></span>
+          <button id="lb-refresh" style="padding:3px 10px;font-size:11px">↻ refresh</button>
+        </h2>
+        <div id="leaderboard-all"></div>
       </div>
 
       <div class="panel">
@@ -334,6 +343,7 @@ function render(s) {
   renderLeaderboard(s);
   renderMatrix(s);
   renderBattles(s);
+  maybeRefreshLeaderboard(s);
 }
 
 function escapeHtml(str) {
@@ -447,8 +457,50 @@ $('save-api-base').onclick = () => {
   setApiBase($('api-base').value.trim());
   connect();
   loadProviders();
+  loadLeaderboard();
   toast('Backend URL applied.');
 };
+
+// ---- all-time (persisted) leaderboard ----------------------------------- //
+
+async function loadLeaderboard() {
+  try {
+    const rows = await getJSON('/api/superradiant/leaderboard');
+    renderPersistedLeaderboard(rows);
+  } catch (e) {
+    // 503 = no DB; quietly show nothing rather than spamming errors.
+    renderPersistedLeaderboard(null);
+  }
+}
+
+function renderPersistedLeaderboard(rows) {
+  const el = $('leaderboard-all');
+  if (!rows) { el.innerHTML = '<div class="empty">Requires a database (DATABASE_URL).</div>'; return; }
+  if (!rows.length) { el.innerHTML = '<div class="empty">No persisted results yet.</div>'; return; }
+  el.innerHTML = `<table><thead><tr><th>#</th><th>Agent</th><th>Kind</th><th class="num">Scored</th><th class="num">Avg accuracy</th></tr></thead><tbody>
+    ${rows.map((r, i) => `<tr>
+      <td class="rank">${i + 1}</td>
+      <td>${escapeHtml(r.agent_name)}</td>
+      <td class="muted">${escapeHtml(r.agent_kind)}</td>
+      <td class="num">${r.benchmarks_scored}</td>
+      <td class="num">${r.avg_accuracy_percent.toFixed(2)}%</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+$('lb-refresh').onclick = () => loadLeaderboard();
+
+// Reload the persisted leaderboard whenever new scored results land in the live
+// stream (count of scored assignments increases).
+let _lastScored = -1;
+function maybeRefreshLeaderboard(s) {
+  let scored = 0;
+  (s.agents || []).forEach(a => (a.assignments || []).forEach(x => { if (x.status === 'scored') scored++; }));
+  if (scored !== _lastScored) {
+    _lastScored = scored;
+    loadLeaderboard();
+  }
+}
 
 // ---- live stream -------------------------------------------------------- //
 
@@ -456,7 +508,7 @@ function connect() {
   if (ES) { ES.close(); ES = null; }
   const url = api('/api/superradiant/stream') + (token() ? ('?token=' + encodeURIComponent(token())) : '');
   ES = new EventSource(url);
-  ES.onopen = () => { $('livedot').classList.add('live'); $('conn').textContent = 'live'; loadProviders(); };
+  ES.onopen = () => { $('livedot').classList.add('live'); $('conn').textContent = 'live'; loadProviders(); loadLeaderboard(); };
   ES.onmessage = (ev) => { try { render(JSON.parse(ev.data)); } catch (e) {} };
   ES.onerror = () => {
     $('livedot').classList.remove('live');

@@ -1,0 +1,164 @@
+{
+  "species": {
+    "input_name": "lionfish",
+    "scientific_name": "Pterois volitans",
+    "genus": "Pterois",
+    "specific_epithet": "volitans",
+    "common_name": "Red lionfish",
+    "family": "Scorpaenidae",
+    "order": "Perciformes/Scorpaenoidei",
+    "class": ""
+  },
+  "morphology": {
+    "max_length_cm": 45.7,
+    "max_weight_kg": null,
+    "depth_range_m": {
+      "min": 2,
+      "max": 55
+    },
+    "body_shape_description": "fusiform / normal. Biology Glossary (e.g. epibenthic) Inhabit lagoon and seaward reefs from turbid inshore areas to dep",
+    "coloration_description": "",
+    "teeth_description": "",
+    "fins": {
+      "dorsal_spines": null,
+      "dorsal_rays": null,
+      "anal_spines": 3,
+      "anal_rays": 6
+    },
+    "fin_colors": {
+      "caudal": null,
+      "dorsal": null,
+      "anal": null,
+      "pectoral": null,
+      "pelvic": null
+    },
+    "has_finlets": false,
+    "scale_type": "cycloid",
+    "coloration_details": {
+      "dorsal_color": "red",
+      "ventral_color": null,
+      "lateral_line_color": null,
+      "iridescent": false,
+      "pattern": "none",
+      "pattern_color": null
+    },
+    "trophic_level": 4.4,
+    "is_dangerous": true
+  },
+  "locomotion": {
+    "type": "subcarangiform",
+    "description": "Rear half of body undulates; the most common teleost swimming mode.",
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering"
+  },
+  "behavior": {
+    "max_speed_kmh": null,
+    "diet_keywords": [
+      "fish",
+      "crustaceans",
+      "invertebrates",
+      "eels"
+    ],
+    "description": "The red lionfish is a venomous coral reef fish in the family Scorpaenidae, order Scorpaeniformes. It is mainly native to the Indo-Pacific region, but has become an invasive species in the Caribbean Sea, as well as along the East Coast of the United States and East Mediterranean and also found in Brazil at Fernando de Noronha.",
+    "sections": {
+      "section_life_history_and_behavior": "They are mainly a solitary species and courting is the only time they aggregate, generally one male with several females.[4]BothP. volitansandP. milesaregonochoristicand only showsexual dimorphismduring reproduction. Similar courtship behaviors are observed in allPteroisspecies, including circling, sidewinding, following, and leading. The lionfish are mostlynocturnal, leading to the behaviors typically around nightfall and continuing through the night. After courtship, the female releases two eg"
+    }
+  },
+  "blender_params": {
+    "body_depth_ratio": 0.22,
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering",
+    "feeding_style": "ram-strike",
+    "mouth_gape": "large",
+    "is_dangerous": true,
+    "recommended_spine_bone_count": 8,
+    "animation_clips": [
+      {
+        "name": "idle_swim",
+        "description": "Looping swim cycle",
+        "frames": 48
+      },
+      {
+        "name": "turn_left",
+        "description": "Banking left turn",
+        "frames": 24
+      },
+      {
+        "name": "turn_right",
+        "description": "Banking right turn",
+        "frames": 24
+      },
+      {
+        "name": "dive",
+        "description": "Downward dive",
+        "frames": 30
+      },
+      {
+        "name": "surface",
+        "description": "Rising to surface",
+        "frames": 30
+      },
+      {
+        "name": "startle",
+        "description": "Escape-response burst",
+        "frames": 12
+      },
+      {
+        "name": "attack_strike",
+        "description": "Burst lunge at prey",
+        "frames": 20
+      },
+      {
+        "name": "feeding_bite",
+        "description": "Mouth open/close bite",
+        "frames": 16
+      },
+      {
+        "name": "threat_display",
+        "description": "Threat/warning posture",
+        "frames": 30
+      }
+    ],
+    "fishsim_params": {
+      "stroke_period": 28,
+      "max_tail_angle": 36,
+      "drag": 0.7,
+      "effort": 0.46,
+      "max_steering_angle": 40.0,
+      "hover_mode": false,
+      "note": "Import these values into the FishSim addon panel (extensions.blender.org/add-ons/fishsim/) after adding a fish rig."
+    }
+  },
+  "reference_images": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Pterois_volitans_Manado-e_edit.jpg",
+      "thumbnail": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Pterois_volitans_Manado-e_edit.jpg/330px-Pterois_volitans_Manado-e_edit.jpg",
+      "source": "wikipedia",
+      "type": "adult",
+      "dims": [
+        3182,
+        2305
+      ]
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Ptvol_ud.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Ptvol_ud.jpg",
+      "source": "fishbase",
+      "type": "adult",
+      "dims": null
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Ptvol_l0.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Ptvol_l0.jpg",
+      "source": "fishbase",
+      "type": "larvae",
+      "dims": null
+    }
+  ],
+  "sources": {
+    "fishbase_url": "https://www.fishbase.se/summary/Pterois-volitans.html",
+    "wikipedia_url": "https://en.wikipedia.org/wiki/Red_lionfish"
+  }
+}

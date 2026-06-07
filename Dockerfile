@@ -17,6 +17,10 @@ COPY --from=build /app/target/release/sia /usr/local/bin/sia
 # Benchmark task dirs (task.md + evaluate.py) are read at runtime for scoring.
 COPY --from=build /app/sia ./sia
 ENV SUPERRADIANT_PYTHON=python3
+# Scored battle results persist here. Mount a Railway volume at /data so run
+# history survives redeploys (the container filesystem is otherwise ephemeral).
+RUN mkdir -p /data/runs
+VOLUME ["/data"]
 # Railway injects $PORT; the server binds 0.0.0.0:$PORT.
 EXPOSE 8000
-CMD ["sia", "superradiant", "--runs-dir", "/app/runs"]
+CMD ["sia", "superradiant", "--runs-dir", "/data/runs"]

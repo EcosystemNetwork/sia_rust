@@ -1,0 +1,155 @@
+{
+  "species": {
+    "input_name": "kelp bass",
+    "scientific_name": "Paralabrax clathratus",
+    "genus": "Paralabrax",
+    "specific_epithet": "clathratus",
+    "common_name": "Kelp bass",
+    "family": "Serranidae",
+    "order": "Perciformes/Serranoidei",
+    "class": ""
+  },
+  "morphology": {
+    "max_length_cm": 72.0,
+    "max_weight_kg": null,
+    "depth_range_m": {
+      "min": 1,
+      "max": 61
+    },
+    "body_shape_description": "3.9 ±0.4 se",
+    "coloration_description": "Paralabrax clathratushas an elongate,[4]relatively deep, compressed body with a pointed snout and a large, downturned[5]mouth. The mouth extends back as far as the centre line of the pupil and the lower mandible protrudes to form part of the snout. There are teeth all over the roof of the mouth. The",
+    "teeth_description": "",
+    "fins": {
+      "dorsal_spines": null,
+      "dorsal_rays": null,
+      "anal_spines": null,
+      "anal_rays": null
+    },
+    "fin_colors": {
+      "caudal": null,
+      "dorsal": null,
+      "anal": null,
+      "pectoral": null,
+      "pelvic": null
+    },
+    "has_finlets": false,
+    "scale_type": "ctenoid",
+    "coloration_details": {
+      "dorsal_color": null,
+      "ventral_color": null,
+      "lateral_line_color": null,
+      "iridescent": false,
+      "pattern": "none",
+      "pattern_color": null
+    },
+    "trophic_level": 3.9,
+    "is_dangerous": false
+  },
+  "locomotion": {
+    "type": "carangiform",
+    "description": "Rear third of body undulates; efficient for sustained fast swimming.",
+    "body_undulation": 0.35,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering"
+  },
+  "behavior": {
+    "max_speed_kmh": null,
+    "diet_keywords": [
+      "fish",
+      "crustaceans",
+      "plankton",
+      "invertebrates",
+      "algae",
+      "zooplankton"
+    ],
+    "description": "Paralabrax clathratus, the kelp bass, bull bass or calico bass, is a species of marine ray-finned fish, from the subfamily Serraninae, classified as part of the family Serranidae which includes the groupers and anthias. It is found in the eastern North Pacific Ocean where it is an important species for both recreational and commercial fisheries.",
+    "sections": {
+      "section_description": "Paralabrax clathratushas an elongate,[4]relatively deep, compressed body with a pointed snout and a large, downturned[5]mouth. The mouth extends back as far as the centre line of the pupil and the lower mandible protrudes to form part of the snout. There are teeth all over the roof of the mouth. The margins of the preopercle have fine serrations.[6]There is a large spine on the edge of the gill cover.[7]Thedorsal finhas 10 spines and 13–14 soft rays, the 3rd and 4th spine are the longest, both b",
+      "section_habitat_and_biology": "Paralabrax clathratusis found at depths between 0 and 61 metres (0 and 200 ft),[1]though they typically remain between 2.7 and 21.3 meters below the surface. They show a strong association withkelpand are almost always found inhabitingkelp forestsand estuaries.[3]They can also reside in nearshore rocky-reefs.[5]They utilize a variety of micro-habitats within this habitat for feeding, shelter and breeding, for example the juveniles will hide among the blades of kelp and among seaweed in the inter"
+    }
+  },
+  "blender_params": {
+    "body_depth_ratio": 0.3,
+    "body_undulation": 0.35,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering",
+    "feeding_style": "ram-strike",
+    "mouth_gape": "large",
+    "is_dangerous": false,
+    "recommended_spine_bone_count": 6,
+    "animation_clips": [
+      {
+        "name": "idle_swim",
+        "description": "Looping swim cycle",
+        "frames": 48
+      },
+      {
+        "name": "turn_left",
+        "description": "Banking left turn",
+        "frames": 24
+      },
+      {
+        "name": "turn_right",
+        "description": "Banking right turn",
+        "frames": 24
+      },
+      {
+        "name": "dive",
+        "description": "Downward dive",
+        "frames": 30
+      },
+      {
+        "name": "surface",
+        "description": "Rising to surface",
+        "frames": 30
+      },
+      {
+        "name": "startle",
+        "description": "Escape-response burst",
+        "frames": 12
+      },
+      {
+        "name": "attack_strike",
+        "description": "Burst lunge at prey",
+        "frames": 20
+      },
+      {
+        "name": "feeding_bite",
+        "description": "Mouth open/close bite",
+        "frames": 16
+      }
+    ],
+    "fishsim_params": {
+      "stroke_period": 22,
+      "max_tail_angle": 30,
+      "drag": 0.6,
+      "effort": 0.72,
+      "max_steering_angle": 31.0,
+      "hover_mode": false,
+      "note": "Import these values into the FishSim addon panel (extensions.blender.org/add-ons/fishsim/) after adding a fish rig."
+    }
+  },
+  "reference_images": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Paralabrax_clathratus.jpg",
+      "thumbnail": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Paralabrax_clathratus.jpg/330px-Paralabrax_clathratus.jpg",
+      "source": "wikipedia",
+      "type": "adult",
+      "dims": [
+        1520,
+        944
+      ]
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Pacla_u4.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Pacla_u4.jpg",
+      "source": "fishbase",
+      "type": "adult",
+      "dims": null
+    }
+  ],
+  "sources": {
+    "fishbase_url": "https://www.fishbase.se/summary/Paralabrax-clathratus.html",
+    "wikipedia_url": "https://en.wikipedia.org/wiki/Paralabrax_clathratus"
+  }
+}

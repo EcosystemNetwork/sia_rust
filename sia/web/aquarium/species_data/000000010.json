@@ -1,0 +1,154 @@
+{
+  "species": {
+    "input_name": "blue tang",
+    "scientific_name": "Paracanthurus hepatus",
+    "genus": "Paracanthurus",
+    "specific_epithet": "hepatus",
+    "common_name": "Palette surgeonfish",
+    "family": "Acanthuridae",
+    "order": "Acanthuriformes",
+    "class": ""
+  },
+  "morphology": {
+    "max_length_cm": 31.0,
+    "max_weight_kg": null,
+    "depth_range_m": {
+      "min": 2,
+      "max": 40
+    },
+    "body_shape_description": "short and / or deep",
+    "coloration_description": "Paracanthurus hepatushas a royal blue body, yellow tail, and black \"palette\" design. Its length at first sexual maturity is 149.2 mm.[6]Adults typically weigh around 600 g (21 oz) and males are generally larger than females.[7]The back has a broad black area that encloses at the tip of thepectoral, ",
+    "teeth_description": "",
+    "fins": {
+      "dorsal_spines": null,
+      "dorsal_rays": null,
+      "anal_spines": 3,
+      "anal_rays": 18
+    },
+    "fin_colors": {
+      "caudal": "yellow",
+      "dorsal": null,
+      "anal": null,
+      "pectoral": "blue",
+      "pelvic": null
+    },
+    "has_finlets": false,
+    "scale_type": "cycloid",
+    "coloration_details": {
+      "dorsal_color": "blue",
+      "ventral_color": null,
+      "lateral_line_color": null,
+      "iridescent": false,
+      "pattern": "none",
+      "pattern_color": null
+    },
+    "trophic_level": 3.4,
+    "is_dangerous": true
+  },
+  "locomotion": {
+    "type": "labriform",
+    "description": "Pectoral fins are the primary thrust source; body mostly stationary.",
+    "body_undulation": 0.1,
+    "tail_shape": "rounded",
+    "pectoral_fin_role": "primary"
+  },
+  "behavior": {
+    "max_speed_kmh": null,
+    "diet_keywords": [
+      "fish",
+      "plankton",
+      "algae",
+      "zooplankton"
+    ],
+    "description": "Paracanthurus hepatus is a species of Indo-Pacific surgeonfish. A popular fish in marine aquaria, it is the only member of the genus Paracanthurus.",
+    "sections": {
+      "section_description": "Paracanthurus hepatushas a royal blue body, yellow tail, and black \"palette\" design. Its length at first sexual maturity is 149.2 mm.[6]Adults typically weigh around 600 g (21 oz) and males are generally larger than females.[7]The back has a broad black area that encloses at the tip of thepectoral, creating a blue oval on each side of the fish that extends in the direction of the eye.[8]The tail has a bright yellow triangle with its apexanteriorto thecaudalspine and its base at theposteriorend o",
+      "section_ecology": "Paracanthurusis adiurnal[10]marine speciesthat occupies marineneritichabitats along coastlines.[14]It is found in clear water on exposed outer reef areas or in channels with a moderate or strong current.[4]It primarily utilizes coral reef habitats, but is also known to utilize seagrass beds, mangroves, algal beds, and rocky reefs [1]. It has an upper and lower depth limit of 2 meters and 40 meters, respectively .[4]They live in pairs or small groups of 8 to 14 individuals. They can also be found",
+      "section_diet": "As a juvenile, its diet consists primarily ofplankton. Adults areomnivorousand feed onzooplankton, but will also graze onfilamentous algae.[16] Spawningtakes place year round, with a peak between April and September.[6]Spawning occurs during late afternoon and evening hours around outer reef slopes.[4]This event is indicated by a change in color from a uniform dark blue to a pale blue. Males aggressively court female members of the school, leading to a quick upward spawning rush toward the surfa"
+    }
+  },
+  "blender_params": {
+    "body_depth_ratio": 0.3,
+    "body_undulation": 0.1,
+    "tail_shape": "rounded",
+    "pectoral_fin_role": "primary",
+    "feeding_style": "suction-strike",
+    "mouth_gape": "medium",
+    "is_dangerous": true,
+    "recommended_spine_bone_count": 6,
+    "animation_clips": [
+      {
+        "name": "idle_swim",
+        "description": "Looping swim cycle",
+        "frames": 48
+      },
+      {
+        "name": "turn_left",
+        "description": "Banking left turn",
+        "frames": 24
+      },
+      {
+        "name": "turn_right",
+        "description": "Banking right turn",
+        "frames": 24
+      },
+      {
+        "name": "dive",
+        "description": "Downward dive",
+        "frames": 30
+      },
+      {
+        "name": "surface",
+        "description": "Rising to surface",
+        "frames": 30
+      },
+      {
+        "name": "startle",
+        "description": "Escape-response burst",
+        "frames": 12
+      },
+      {
+        "name": "suction_feed",
+        "description": "Rapid suction strike",
+        "frames": 12
+      },
+      {
+        "name": "threat_display",
+        "description": "Threat/warning posture",
+        "frames": 30
+      }
+    ],
+    "fishsim_params": {
+      "stroke_period": 32,
+      "max_tail_angle": 12,
+      "drag": 0.8,
+      "effort": 0.31,
+      "max_steering_angle": 16.0,
+      "hover_mode": true,
+      "note": "Import these values into the FishSim addon panel (extensions.blender.org/add-ons/fishsim/) after adding a fish rig."
+    }
+  },
+  "reference_images": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Paletten-Doktorfisch_M%C3%BCnster.JPG/3840px-Paletten-Doktorfisch_M%C3%BCnster.JPG",
+      "thumbnail": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Paletten-Doktorfisch_M%C3%BCnster.JPG/330px-Paletten-Doktorfisch_M%C3%BCnster.JPG",
+      "source": "wikipedia",
+      "type": "adult",
+      "dims": [
+        3872,
+        2592
+      ]
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Pahep_uo.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Pahep_uo.jpg",
+      "source": "fishbase",
+      "type": "adult",
+      "dims": null
+    }
+  ],
+  "sources": {
+    "fishbase_url": "https://www.fishbase.se/summary/Paracanthurus-hepatus.html",
+    "wikipedia_url": "https://en.wikipedia.org/wiki/Paracanthurus"
+  }
+}

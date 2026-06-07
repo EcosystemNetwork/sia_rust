@@ -1,6 +1,12 @@
 # Railway service config for the Superradiant backend.
 # Add the PostgreSQL plugin (sets DATABASE_URL) and set SUPERRADIANT_SECRET_KEY,
 # SUPERRADIANT_ADMIN_TOKEN, and SUPERRADIANT_CORS_ORIGIN in the service variables.
+#
+# Persistence:
+#   - Provider credentials persist in Postgres (Railway PG or Supabase).
+#   - Scored run history persists on disk at /data/runs — attach a Railway
+#     Volume with mount path /data (Service → Settings → Volumes) so it survives
+#     redeploys. The container CMD already points --runs-dir at /data/runs.
 # See docs/SUPERRADIANT_DEPLOY.md.
 
 [build]

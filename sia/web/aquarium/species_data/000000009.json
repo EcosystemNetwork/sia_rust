@@ -1,0 +1,154 @@
+{
+  "species": {
+    "input_name": "garibaldi damselfish",
+    "scientific_name": "Hypsypops rubicundus",
+    "genus": "Hypsypops",
+    "specific_epithet": "rubicundus",
+    "common_name": "garibaldi damselfish",
+    "family": "Pomacentridae",
+    "order": "",
+    "class": ""
+  },
+  "morphology": {
+    "max_length_cm": 30.0,
+    "max_weight_kg": null,
+    "depth_range_m": null,
+    "body_shape_description": "short and / or deep",
+    "coloration_description": "Garibaldi are deep-bodied or laterally compressed fish, and covered in coarse scales. They have a single dorsal fin with about 12 spines and 16 rays.[5]Adult fish of this species are uniformly bright orange in color. It is the largest member of thedamselfishfamily growing up to 35.6 cm (14 inches) i",
+    "teeth_description": "",
+    "fins": {
+      "dorsal_spines": null,
+      "dorsal_rays": null,
+      "anal_spines": 2,
+      "anal_rays": 13
+    },
+    "fin_colors": {
+      "caudal": null,
+      "dorsal": "red",
+      "anal": null,
+      "pectoral": null,
+      "pelvic": null
+    },
+    "has_finlets": false,
+    "scale_type": "ctenoid",
+    "coloration_details": {
+      "dorsal_color": "red",
+      "ventral_color": null,
+      "lateral_line_color": null,
+      "iridescent": false,
+      "pattern": "none",
+      "pattern_color": null
+    },
+    "trophic_level": 3.5,
+    "is_dangerous": false
+  },
+  "locomotion": {
+    "type": "subcarangiform",
+    "description": "Rear half of body undulates; the most common teleost swimming mode.",
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering"
+  },
+  "behavior": {
+    "max_speed_kmh": null,
+    "diet_keywords": [
+      "fish",
+      "plankton",
+      "shrimp",
+      "invertebrates",
+      "algae",
+      "copepods"
+    ],
+    "description": "The Garibaldi, known historically as the Catalina goldfish and marine goldfish and now commonly as the Garibaldi damselfish, is a species of bright orange fish in the damselfish family. It occurs in the subtropical northeastern part of the Pacific Ocean. The Garibaldi was named the official marine state fish of California in 1995, and has since been protected in California coastal waters from recreation and commercial fishing.",
+    "sections": {
+      "section_description": "Garibaldi are deep-bodied or laterally compressed fish, and covered in coarse scales. They have a single dorsal fin with about 12 spines and 16 rays.[5]Adult fish of this species are uniformly bright orange in color. It is the largest member of thedamselfishfamily growing up to 35.6 cm (14 inches) in length. Among Garibaldi there is a sexual size dimorphism, with average adult males measuring 25mm (1 inch) larger than females,[6]⁠—an unusual trait for damselfish species and other marine fish in ",
+      "section_biology": "The breeding season for Garibaldi may begin as early as March and continue through July.[5]During this time, the male clears a sheltered nest site within his territory, and then the female deposits eggs in the nest. When first deposited, the elliptical eggs are bright yellow and turn gray after approximately 5 days.[9]After fertilizing the eggs, the male guards the nest area until the eggs hatch, which takes 19–21 days. Garibaldi have diel patterns of egg-hatching, meaning that spawning occurs a",
+      "section_diet": "Classified as generalist omnivores, Garibaldi feed mainly oninvertebrates,[4]which they remove from the rocks. Their diet also includes a variety of algae and occasionally their own eggs.[3]Garibaldi are found to most commonly feed upon fleshy red algae,polychaeteworms, anemones, and sponge fragments. But they have also been found to eat encrustingbryozoans, hydroids, branching bryozoans, mollusks, and brown algae.[3] Adult Garibaldi have very few known natural predators and are protected by law",
+      "section_behavior": "Unlike other damselfish where males guard nest sites only during the mating season, both male and female adult Garibaldi tend to defend year-round territories of about 3-10 square meters, demonstrating a strong attachment to their specific locations.[6]Males are more strict with defense, especially during the breeding season.[12]During the time period that the eggs are developing, the male Garibaldi aggressively tries to keep all other fish away from the eggs, and will boldly attack much larger "
+    }
+  },
+  "blender_params": {
+    "body_depth_ratio": 0.3,
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering",
+    "feeding_style": "ram-strike",
+    "mouth_gape": "large",
+    "is_dangerous": false,
+    "recommended_spine_bone_count": 8,
+    "animation_clips": [
+      {
+        "name": "idle_swim",
+        "description": "Looping swim cycle",
+        "frames": 48
+      },
+      {
+        "name": "turn_left",
+        "description": "Banking left turn",
+        "frames": 24
+      },
+      {
+        "name": "turn_right",
+        "description": "Banking right turn",
+        "frames": 24
+      },
+      {
+        "name": "dive",
+        "description": "Downward dive",
+        "frames": 30
+      },
+      {
+        "name": "surface",
+        "description": "Rising to surface",
+        "frames": 30
+      },
+      {
+        "name": "startle",
+        "description": "Escape-response burst",
+        "frames": 12
+      },
+      {
+        "name": "attack_strike",
+        "description": "Burst lunge at prey",
+        "frames": 20
+      },
+      {
+        "name": "feeding_bite",
+        "description": "Mouth open/close bite",
+        "frames": 16
+      }
+    ],
+    "fishsim_params": {
+      "stroke_period": 28,
+      "max_tail_angle": 36,
+      "drag": 0.7,
+      "effort": 0.3,
+      "max_steering_angle": 40.0,
+      "hover_mode": false,
+      "note": "Import these values into the FishSim addon panel (extensions.blender.org/add-ons/fishsim/) after adding a fish rig."
+    }
+  },
+  "reference_images": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/2/27/Hypsypops_rubicundus_adult.jpg",
+      "thumbnail": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Hypsypops_rubicundus_adult.jpg/330px-Hypsypops_rubicundus_adult.jpg",
+      "source": "wikipedia",
+      "type": "adult",
+      "dims": [
+        1200,
+        827
+      ]
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Hyrub_u1.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Hyrub_u1.jpg",
+      "source": "fishbase",
+      "type": "adult",
+      "dims": null
+    }
+  ],
+  "sources": {
+    "fishbase_url": "https://www.fishbase.se/summary/Hypsypops-rubicundus.html",
+    "wikipedia_url": "https://en.wikipedia.org/wiki/Garibaldi_(fish)"
+  }
+}

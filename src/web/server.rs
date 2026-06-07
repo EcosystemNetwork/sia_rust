@@ -40,14 +40,23 @@ pub fn create_app_with_store(
     store: Option<crate::superradiant::credentials::CredentialStore>,
 ) -> Router {
     let runs_root = canonical_runs_root(runs_dir);
-    let superradiant = crate::superradiant::router(
-        crate::superradiant::SuperradiantHandle::with_credentials(
-            runs_root.clone(),
-            admin_token_from_env(),
-            store,
-        ),
+    let handle = crate::superradiant::SuperradiantHandle::with_credentials(
+        runs_root.clone(),
+        admin_token_from_env(),
+        store,
     );
-    assemble(runs_root, superradiant)
+    create_app_from_handle(runs_root, handle)
+}
+
+/// Build the app from an already-constructed handle. Lets callers
+/// `rehydrate_house_from_store().await` on the handle before serving (see
+/// [`serve`]) — the handle's house competitors then appear on first load.
+#[cfg(feature = "superradiant-db")]
+pub fn create_app_from_handle(
+    runs_root: PathBuf,
+    handle: std::sync::Arc<crate::superradiant::SuperradiantHandle>,
+) -> Router {
+    assemble(runs_root, crate::superradiant::router(handle))
 }
 
 fn canonical_runs_root(runs_dir: impl Into<PathBuf>) -> PathBuf {
@@ -343,11 +352,19 @@ pub fn serve(host: &str, port: u16, runs_dir: &str, _open_browser: bool) -> crat
     let rt = tokio::runtime::Runtime::new().map_err(|e| crate::SiaError::new(e.to_string()))?;
     rt.block_on(async move {
         // Build the app inside the runtime so the credential store (async
-        // connect) can be wired in when `superradiant-db` is enabled.
+        // connect) can be wired in when `superradiant-db` is enabled, and the
+        // waiting room rehydrated with house competitors from stored credentials.
         #[cfg(feature = "superradiant-db")]
         let app = {
             let store = connect_credential_store().await;
-            create_app_with_store(&runs_dir, store)
+            let runs_root = canonical_runs_root(&runs_dir);
+            let handle = crate::superradiant::SuperradiantHandle::with_credentials(
+                runs_root.clone(),
+                admin_token_from_env(),
+                store,
+            );
+            handle.rehydrate_house_from_store().await;
+            create_app_from_handle(runs_root, handle)
         };
         #[cfg(not(feature = "superradiant-db"))]
         let app = create_app(&runs_dir);

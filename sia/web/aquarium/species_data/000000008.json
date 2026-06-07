@@ -1,0 +1,147 @@
+{
+  "species": {
+    "input_name": "yellow tang",
+    "scientific_name": "Zebrasoma flavescens",
+    "genus": "Zebrasoma",
+    "specific_epithet": "flavescens",
+    "common_name": "Yellow tang",
+    "family": "Acanthuridae",
+    "order": "Acanthuriformes",
+    "class": ""
+  },
+  "morphology": {
+    "max_length_cm": 20.0,
+    "max_weight_kg": null,
+    "depth_range_m": {
+      "min": 2,
+      "max": 46
+    },
+    "body_shape_description": "short and / or deep. Biology Glossary (e.g. epibenthic) Adults inhabit coral-rich areas of lagoon and seaward reefs fro",
+    "coloration_description": "",
+    "teeth_description": "spatulate,  close-set,  the edges denticulate.",
+    "fins": {
+      "dorsal_spines": null,
+      "dorsal_rays": null,
+      "anal_spines": 3,
+      "anal_rays": 19
+    },
+    "fin_colors": {
+      "caudal": null,
+      "dorsal": null,
+      "anal": null,
+      "pectoral": null,
+      "pelvic": null
+    },
+    "has_finlets": false,
+    "scale_type": "cycloid",
+    "coloration_details": {
+      "dorsal_color": "yellow",
+      "ventral_color": null,
+      "lateral_line_color": null,
+      "iridescent": false,
+      "pattern": "none",
+      "pattern_color": null
+    },
+    "trophic_level": 2.0,
+    "is_dangerous": false
+  },
+  "locomotion": {
+    "type": "labriform",
+    "description": "Pectoral fins are the primary thrust source; body mostly stationary.",
+    "body_undulation": 0.1,
+    "tail_shape": "rounded",
+    "pectoral_fin_role": "primary"
+  },
+  "behavior": {
+    "max_speed_kmh": null,
+    "diet_keywords": [
+      "fish",
+      "crab",
+      "algae",
+      "octopus"
+    ],
+    "description": "The yellow tang, also known as the lemon sailfin, yellow sailfin tang or somber surgeonfish, is a species of marine ray-finned fish belonging to the family Acanthuridae which includes the surgeonfishes, unicornfishes and tangs. Bright yellow in color, it is one of the most popular marine aquarium fish, though in its natural state, it lives in reefs. The yellow tang spawns around a full moon, eats algae, and has a white barb, located just before the tail fin, to protect itself.",
+    "sections": {
+      "section_description_and_biology": "Adult fish can grow to 20 centimetres (7.9 in) in length, and 1–2 centimetres (0.39–0.79 in) in thickness. Adult males tend to be larger than females. Yellow tangs are bright yellow in color. At night, the yellow coloring fades slightly, and a prominent brownish patch develops in the middle with a horizontal white band. They rapidly regain their bright yellow color during daylight. They can be aggressive, are prone tomarine ich, and may damage coral within a reef tank. Male and female yellow tan"
+    }
+  },
+  "blender_params": {
+    "body_depth_ratio": 0.2,
+    "body_undulation": 0.1,
+    "tail_shape": "rounded",
+    "pectoral_fin_role": "primary",
+    "feeding_style": "suction-strike",
+    "mouth_gape": "medium",
+    "is_dangerous": false,
+    "recommended_spine_bone_count": 6,
+    "animation_clips": [
+      {
+        "name": "idle_swim",
+        "description": "Looping swim cycle",
+        "frames": 48
+      },
+      {
+        "name": "turn_left",
+        "description": "Banking left turn",
+        "frames": 24
+      },
+      {
+        "name": "turn_right",
+        "description": "Banking right turn",
+        "frames": 24
+      },
+      {
+        "name": "dive",
+        "description": "Downward dive",
+        "frames": 30
+      },
+      {
+        "name": "surface",
+        "description": "Rising to surface",
+        "frames": 30
+      },
+      {
+        "name": "startle",
+        "description": "Escape-response burst",
+        "frames": 12
+      },
+      {
+        "name": "suction_feed",
+        "description": "Rapid suction strike",
+        "frames": 12
+      }
+    ],
+    "fishsim_params": {
+      "stroke_period": 32,
+      "max_tail_angle": 12,
+      "drag": 0.8,
+      "effort": 0.3,
+      "max_steering_angle": 16.0,
+      "hover_mode": true,
+      "note": "Import these values into the FishSim addon panel (extensions.blender.org/add-ons/fishsim/) after adding a fish rig."
+    }
+  },
+  "reference_images": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/5/5e/Zebrasoma_flavescens_Luc_Viatour.jpg",
+      "thumbnail": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Zebrasoma_flavescens_Luc_Viatour.jpg/330px-Zebrasoma_flavescens_Luc_Viatour.jpg",
+      "source": "wikipedia",
+      "type": "adult",
+      "dims": [
+        3509,
+        2440
+      ]
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Zefla_u6.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Zefla_u6.jpg",
+      "source": "fishbase",
+      "type": "adult",
+      "dims": null
+    }
+  ],
+  "sources": {
+    "fishbase_url": "https://www.fishbase.se/summary/Zebrasoma-flavescens.html",
+    "wikipedia_url": "https://en.wikipedia.org/wiki/Yellow_tang"
+  }
+}

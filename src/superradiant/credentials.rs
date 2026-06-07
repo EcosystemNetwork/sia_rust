@@ -256,6 +256,80 @@ impl CredentialStore {
             api_key,
         })
     }
+
+    // --- persisted leaderboard ------------------------------------------- //
+
+    /// Record one scored (battle × agent × benchmark) result. Best-effort at the
+    /// call site; surfaces DB errors so the caller can log them.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn record_result(
+        &self,
+        battle_id: &str,
+        agent_name: &str,
+        agent_kind: &str,
+        benchmark_id: &str,
+        accuracy_percent: f64,
+        model: Option<&str>,
+        run_dir: Option<&str>,
+    ) -> SiaResult<()> {
+        sqlx::query(
+            "INSERT INTO superradiant_results \
+             (battle_id, agent_name, agent_kind, benchmark_id, accuracy_percent, model, run_dir) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        )
+        .bind(battle_id)
+        .bind(agent_name)
+        .bind(agent_kind)
+        .bind(benchmark_id)
+        .bind(accuracy_percent)
+        .bind(model)
+        .bind(run_dir)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    /// All-time leaderboard: average accuracy per agent across every persisted
+    /// result, best first.
+    pub async fn leaderboard(&self) -> SiaResult<Vec<LeaderboardRow>> {
+        let rows = sqlx::query(
+            "SELECT agent_name, \
+                    max(agent_kind) AS agent_kind, \
+                    count(*) AS benchmarks_scored, \
+                    avg(accuracy_percent) AS avg_acc, \
+                    max(created_at) AS last_at \
+             FROM superradiant_results \
+             GROUP BY agent_name \
+             ORDER BY avg_acc DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        rows.iter()
+            .map(|r| {
+                let last: chrono::DateTime<chrono::Utc> = r.try_get("last_at").map_err(db_err)?;
+                let avg: f64 = r.try_get("avg_acc").map_err(db_err)?;
+                Ok(LeaderboardRow {
+                    agent_name: r.try_get("agent_name").map_err(db_err)?,
+                    agent_kind: r.try_get("agent_kind").map_err(db_err)?,
+                    benchmarks_scored: r.try_get("benchmarks_scored").map_err(db_err)?,
+                    avg_accuracy_percent: (avg * 100.0).round() / 100.0,
+                    last_scored_at: last.to_rfc3339(),
+                })
+            })
+            .collect()
+    }
+}
+
+/// One aggregated all-time leaderboard row.
+#[derive(Debug, Clone, Serialize)]
+pub struct LeaderboardRow {
+    pub agent_name: String,
+    pub agent_kind: String,
+    pub benchmarks_scored: i64,
+    pub avg_accuracy_percent: f64,
+    pub last_scored_at: String,
 }
 
 /// Map a selected DB row to the masked, client-facing struct.

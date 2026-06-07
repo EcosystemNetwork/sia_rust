@@ -1,0 +1,161 @@
+{
+  "species": {
+    "input_name": "clownfish",
+    "scientific_name": "Amphiprion ocellaris",
+    "genus": "Amphiprion",
+    "specific_epithet": "ocellaris",
+    "common_name": "Clown anemonefish",
+    "family": "Pomacentridae",
+    "order": "",
+    "class": ""
+  },
+  "morphology": {
+    "max_length_cm": 11.0,
+    "max_weight_kg": null,
+    "depth_range_m": {
+      "min": 1,
+      "max": 15
+    },
+    "body_shape_description": "fusiform / normal",
+    "coloration_description": "The common clownfish is a small fish which grows up to 11 cm (4.3 inches).[4]Its body has a stocky appearance and oval shape. It is compressed laterally, with a round profile. The coloration of its body is orange to reddish-brown, but it can also be black in some particular areas such as theNorthern",
+    "teeth_description": "",
+    "fins": {
+      "dorsal_spines": null,
+      "dorsal_rays": null,
+      "anal_spines": 2,
+      "anal_rays": 11
+    },
+    "fin_colors": {
+      "caudal": null,
+      "dorsal": null,
+      "anal": null,
+      "pectoral": null,
+      "pelvic": null
+    },
+    "has_finlets": false,
+    "scale_type": "ctenoid",
+    "coloration_details": {
+      "dorsal_color": "orange",
+      "ventral_color": null,
+      "lateral_line_color": null,
+      "iridescent": false,
+      "pattern": "striped_horizontal",
+      "pattern_color": "white"
+    },
+    "trophic_level": 3.1,
+    "is_dangerous": true
+  },
+  "locomotion": {
+    "type": "subcarangiform",
+    "description": "Rear half of body undulates; the most common teleost swimming mode.",
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering"
+  },
+  "behavior": {
+    "max_speed_kmh": null,
+    "diet_keywords": [
+      "fish",
+      "plankton",
+      "algae",
+      "zooplankton",
+      "copepods"
+    ],
+    "description": "The ocellaris clownfish, also known as the false percula clownfish or common clownfish, is a marine fish belonging to the family Pomacentridae, which includes clownfishes and damselfishes. A. ocellaris are found in different colors, depending on where they are located. For example, black A. ocellaris with white bands can be found near northern Hawaii, USA, North America, Australia, Southeast Asia, and Japan. Orange or red-brown A. ocellaris also exist with three similar white bands on the body and head. A. ocellaris can be distinguished from other Amphiprion species based on the number of pect",
+    "sections": {
+      "section_description": "The common clownfish is a small fish which grows up to 11 cm (4.3 inches).[4]Its body has a stocky appearance and oval shape. It is compressed laterally, with a round profile. The coloration of its body is orange to reddish-brown, but it can also be black in some particular areas such as theNorthern TerritoryinAustralia.[8][9]It has three vertical white stripes outlined with a fine black line. The first passes just behind the eye, the second in the middle of the body widens forward to the head c",
+      "section_behavior": "Amphiprion ocellarisis adiurnalfish. It is aprotandrous hermaphrodite, which means the male can change its sex to female during its life, and lives in a harem in which an established dominance hierarchy manages the group and keeps individuals at a specific social rank.\nIt is aggressively territorial and is completely dependent on its sea anemone.[12] Amphiprion ocellarisare reliant on sea anemone for shelter (they have a symbiotic relationship with the sea anemone). Sea anemone are protection fo"
+    }
+  },
+  "blender_params": {
+    "body_depth_ratio": 0.22,
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering",
+    "feeding_style": "suction-strike",
+    "mouth_gape": "medium",
+    "is_dangerous": true,
+    "recommended_spine_bone_count": 8,
+    "animation_clips": [
+      {
+        "name": "idle_swim",
+        "description": "Looping swim cycle",
+        "frames": 48
+      },
+      {
+        "name": "turn_left",
+        "description": "Banking left turn",
+        "frames": 24
+      },
+      {
+        "name": "turn_right",
+        "description": "Banking right turn",
+        "frames": 24
+      },
+      {
+        "name": "dive",
+        "description": "Downward dive",
+        "frames": 30
+      },
+      {
+        "name": "surface",
+        "description": "Rising to surface",
+        "frames": 30
+      },
+      {
+        "name": "startle",
+        "description": "Escape-response burst",
+        "frames": 12
+      },
+      {
+        "name": "suction_feed",
+        "description": "Rapid suction strike",
+        "frames": 12
+      },
+      {
+        "name": "threat_display",
+        "description": "Threat/warning posture",
+        "frames": 30
+      }
+    ],
+    "fishsim_params": {
+      "stroke_period": 28,
+      "max_tail_angle": 36,
+      "drag": 0.7,
+      "effort": 0.3,
+      "max_steering_angle": 40.0,
+      "hover_mode": false,
+      "note": "Import these values into the FishSim addon panel (extensions.blender.org/add-ons/fishsim/) after adding a fish rig."
+    }
+  },
+  "reference_images": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Clown_fish_in_the_Andaman_Coral_Reef.jpg/3840px-Clown_fish_in_the_Andaman_Coral_Reef.jpg",
+      "thumbnail": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Clown_fish_in_the_Andaman_Coral_Reef.jpg/330px-Clown_fish_in_the_Andaman_Coral_Reef.jpg",
+      "source": "wikipedia",
+      "type": "adult",
+      "dims": [
+        3884,
+        2600
+      ]
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Amoce_u0.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Amoce_u0.jpg",
+      "source": "fishbase",
+      "type": "adult",
+      "dims": null
+    },
+    {
+      "url": "http://www.fishbase.org/images/species/Amoce_e0.jpg",
+      "thumbnail": "http://www.fishbase.org/images/thumbnails/jpg/tn_Amoce_e0.jpg",
+      "source": "fishbase",
+      "type": "larvae",
+      "dims": null
+    }
+  ],
+  "sources": {
+    "fishbase_url": "https://www.fishbase.se/summary/Amphiprion-ocellaris.html",
+    "wikipedia_url": "https://en.wikipedia.org/wiki/Ocellaris_clownfish"
+  }
+}

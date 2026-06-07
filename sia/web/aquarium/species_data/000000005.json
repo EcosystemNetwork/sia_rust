@@ -1,0 +1,149 @@
+{
+  "species": {
+    "input_name": "sea urchin",
+    "scientific_name": "Mesocentrotus franciscanus",
+    "genus": "Mesocentrotus",
+    "specific_epithet": "franciscanus",
+    "common_name": "sea urchin",
+    "family": "",
+    "order": "",
+    "class": ""
+  },
+  "morphology": {
+    "max_length_cm": null,
+    "max_weight_kg": null,
+    "depth_range_m": null,
+    "body_shape_description": "",
+    "coloration_description": "A sea urchin's spherical body is completely covered by sharp spines. These spines grow on a hard shell called the \"test\", which encloses the animal.  It can vary in color from red to dark burgundy. Rarely,albinospecimens are found. It has a mouth located on its underside, which is surrounded by five",
+    "teeth_description": "",
+    "fins": {
+      "dorsal_spines": null,
+      "dorsal_rays": null,
+      "anal_spines": null,
+      "anal_rays": null
+    },
+    "fin_colors": {
+      "caudal": null,
+      "dorsal": null,
+      "anal": null,
+      "pectoral": null,
+      "pelvic": null
+    },
+    "has_finlets": false,
+    "scale_type": "cycloid",
+    "coloration_details": {
+      "dorsal_color": "red",
+      "ventral_color": null,
+      "lateral_line_color": null,
+      "iridescent": false,
+      "pattern": "none",
+      "pattern_color": null
+    },
+    "trophic_level": null,
+    "is_dangerous": false
+  },
+  "locomotion": {
+    "type": "subcarangiform",
+    "description": "Rear half of body undulates; the most common teleost swimming mode.",
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering"
+  },
+  "behavior": {
+    "max_speed_kmh": null,
+    "diet_keywords": [
+      "fish",
+      "squid",
+      "crustaceans",
+      "plankton",
+      "krill",
+      "shrimp",
+      "crab",
+      "herring",
+      "mackerel",
+      "sardine",
+      "anchovy",
+      "algae",
+      "zooplankton",
+      "octopus"
+    ],
+    "description": "The red sea urchin is a sea urchin found in the northeastern Pacific Ocean from Alaska to Baja California. It lives in shallow waters from the low-tide line to greater than 280 m (920 ft) deep, and is typically found on rocky shores sheltered from extreme wave action in areas where kelp is available.",
+    "sections": {
+      "section_description": "A sea urchin's spherical body is completely covered by sharp spines. These spines grow on a hard shell called the \"test\", which encloses the animal.  It can vary in color from red to dark burgundy. Rarely,albinospecimens are found. It has a mouth located on its underside, which is surrounded by five teeth. During larval development, the body of a sea urchin transitions from bilateral to radial symmetry. This bilaterally symmetrical larva, called an echinopluteus, subsequently develops a type of ",
+      "section_feeding_habits": "This animal has a mouth with special jaws (Aristotle's lantern) located on the bottom (oral) surface. Its preferred diet is seaweeds and algae, includinggiant kelp(Macrocystis pyrifera) andbull kelp(Nereocystis luetkeana), which it scrapes off and tears up from the sea floor.[6]Adults may consume plankton (particularlyLithothamnionsp. andBossiellasp.) if other food sources are not available.[7]During larval development, urchins use bands of cilia to capture food (namely zooplankton) from the wat",
+      "section_behavior_and_reproduction": "Sea urchins are often found living in groups of five to ten individuals. They can regenerate lost spines. Their lifespan frequently exceeds 30 years, and marine biologists have discovered some species with dramatically longer lifespans; certain individuals have been estimated to live for more than 200 years.[12]Red sea urchins are notoriously ravenous kelp-eaters and are implicated in devastatingkelp beds[5]by forming grazing fronts. The intense grazing pressure exerted by urchins is an importan"
+    }
+  },
+  "blender_params": {
+    "body_depth_ratio": 0.3,
+    "body_undulation": 0.5,
+    "tail_shape": "forked",
+    "pectoral_fin_role": "steering",
+    "feeding_style": "suction-strike",
+    "mouth_gape": "medium",
+    "is_dangerous": false,
+    "recommended_spine_bone_count": 8,
+    "animation_clips": [
+      {
+        "name": "idle_swim",
+        "description": "Looping swim cycle",
+        "frames": 48
+      },
+      {
+        "name": "turn_left",
+        "description": "Banking left turn",
+        "frames": 24
+      },
+      {
+        "name": "turn_right",
+        "description": "Banking right turn",
+        "frames": 24
+      },
+      {
+        "name": "dive",
+        "description": "Downward dive",
+        "frames": 30
+      },
+      {
+        "name": "surface",
+        "description": "Rising to surface",
+        "frames": 30
+      },
+      {
+        "name": "startle",
+        "description": "Escape-response burst",
+        "frames": 12
+      },
+      {
+        "name": "suction_feed",
+        "description": "Rapid suction strike",
+        "frames": 12
+      }
+    ],
+    "fishsim_params": {
+      "stroke_period": 28,
+      "max_tail_angle": 36,
+      "drag": 0.7,
+      "effort": 0.3,
+      "max_steering_angle": 40.0,
+      "hover_mode": false,
+      "note": "Import these values into the FishSim addon panel (extensions.blender.org/add-ons/fishsim/) after adding a fish rig."
+    }
+  },
+  "reference_images": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/Strongylocentrotus_franciscanus.jpg",
+      "thumbnail": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Strongylocentrotus_franciscanus.jpg/330px-Strongylocentrotus_franciscanus.jpg",
+      "source": "wikipedia",
+      "type": "adult",
+      "dims": [
+        1660,
+        1438
+      ]
+    }
+  ],
+  "sources": {
+    "fishbase_url": "https://www.fishbase.se/summary/Mesocentrotus-franciscanus.html",
+    "wikipedia_url": "https://en.wikipedia.org/wiki/Red_sea_urchin"
+  }
+}
