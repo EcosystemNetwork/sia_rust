@@ -8,7 +8,7 @@ version = "0.4.0"
 description = "SIA: Self-Improving AI framework"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 authors = [
     { name = "Hexo", email = "sia@hexo.ai" },
 ]
@@ -33,7 +33,9 @@ dependencies = [
 
 [project.optional-dependencies]
 claude = ["claude-agent-sdk>=0.1.50"]
-openhands = ["openhands-ai>=1.6.0"]
+# openhands-ai requires Python >=3.12,<3.14; gate it so the universal
+# dependency resolution (e.g. Vercel's `uv lock`) stays solvable on 3.11.
+openhands = ["openhands-ai>=1.6.0; python_version >= '3.12'"]
 pydantic-ai = ["pydantic-ai>=1.0"]
 mlebench = ["google-generativeai>=0.8"]
 dev = [
