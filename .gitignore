@@ -213,6 +213,8 @@ task_1/public/data
 
 data
 runs
+# Superradiant local scratch (battle/run artifacts, work dirs).
+.superradiant_work/
 
 # Claude Code agent worktrees / local state (but DO track shared project skills)
 .claude/*

@@ -83,7 +83,8 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "fish_id": {"type": "string", "description": "fish_id, species common name, or 'all'"},
-                "action": {"type": "string", "description": "Animation name e.g. 'idle_swim', 'startle', 'feeding_bite'"},
+                "action": {"type": "string",
+                           "description": "Animation name e.g. 'idle_swim', 'startle', 'feeding_bite'"},
                 "duration_seconds": {"type": "number", "default": 5},
                 "target_zone": {"type": "string", "enum": ["surface", "mid", "deep", "bottom"]},
             },
@@ -206,8 +207,7 @@ class AquariumTools:
             if abs(fish.x - x_fraction) > _FOOD_REACH:
                 continue
 
-            full_until  = fish.fed_at + fish.hunger_interval * fish.full_fraction
-            must_eat_by = fish.fed_at + fish.hunger_interval
+            full_until = fish.fed_at + fish.hunger_interval * fish.full_fraction
 
             if now < full_until:
                 secs_full = round(full_until - now)

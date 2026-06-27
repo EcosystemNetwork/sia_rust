@@ -49,7 +49,8 @@ class Researcher:
                 key = _index_key(species.get(field, ""))
                 if key:
                     self._bundled.setdefault(key, data)
-        log.info("Aquarium researcher: %d bundled species snapshots loaded", len(set(id(v) for v in self._bundled.values())))
+        n_unique = len({id(v) for v in self._bundled.values()})
+        log.info("Aquarium researcher: %d bundled species snapshots loaded", n_unique)
 
     async def start(self) -> None:  # pragma: no cover - lifecycle parity
         pass

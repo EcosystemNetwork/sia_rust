@@ -265,7 +265,8 @@ async def scrape_fishbase(client: httpx.AsyncClient, scientific_name: str) -> di
     if short_desc:
         for sibling in short_desc.find_all_next(['p', 'td', 'h1'])[:6]:
             t = sibling.get_text(' ', strip=True)
-            if re.search(r'\b(blue|green|silver|gold|dark|pale|spotted|striped|color|colour)\b', t, re.IGNORECASE) and len(t) > 30:
+            _color_re = r'\b(blue|green|silver|gold|dark|pale|spotted|striped|color|colour)\b'
+            if re.search(_color_re, t, re.IGNORECASE) and len(t) > 30:
                 data['coloration_raw'] = t[:300]
                 break
 
